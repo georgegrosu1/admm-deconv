@@ -42,8 +42,20 @@ function fftnMatLike(input_arr::Array, out_shape::Tuple)::Array{ComplexF32}
 end
 
 
-function forward_d(data::Array{Float32}, beta::Array{Float32, 3})
-    
+function forward_d(data::Array{Float32, 4}, beta::Vector{Float32}=[Float32(1), Float32(1), Float32(0)])
+    Δx = diff(data, dims=1)
+    Δx_resid = expand_dims(data[begin, :, :, :] - data[end, :, :, :], 1)
+    Δx = beta[1] * cat(Δx, Δx_resid, dims=1)
+
+    Δy = diff(data, dims=2)
+    Δy_resid = expand_dims(data[:, begin, :, :] - data[:, end, :, :], 2)
+    Δy = beta[2] * cat(Δy, Δy_resid, dims=2)
+
+    Δz = diff(data, dims=3)
+    Δz_resid = expand_dims(data[:, :, begin, :] - data[:, :, 3, :], 3)
+    Δz = beta[3] * cat(Δz, Δz_resid, dims=3)
+
+    return Δx, Δy, Δz
 end
 
 
