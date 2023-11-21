@@ -62,9 +62,9 @@ end
 
 
 function divergence3d(x::Array{Float32, 4}, 
-                    y::Array{Float32, 4}, 
-                    z::Array{Float32, 4}, 
-                    beta::Vector{Float32}=[Float32(1), Float32(1), Float32(0)])
+                      y::Array{Float32, 4}, 
+                      z::Array{Float32, 4}, 
+                      beta::Vector{Float32}=[Float32(1), Float32(1), Float32(0)])
 
     @assert length(beta) == 3 "beta param. must have 3 elements"
 
