@@ -42,7 +42,9 @@ function fftnMatLike(input_arr::Array, out_shape::Tuple)::Array{ComplexF32}
 end
 
 
-function forward_d(data::Array{Float32, 4}, beta::Vector{Float32}=[Float32(1), Float32(1), Float32(0)])
+function forward_diff3d(data::Array{Float32, 4}, beta::Vector{Float32}=[Float32(1), Float32(1), Float32(0)])
+    @assert length(beta) == 3 "beta param. must have 3 elements"
+
     Δx = diff(data, dims=1)
     Δx_resid = expand_dims(data[begin, :, :, :] - data[end, :, :, :], 1)
     Δx = beta[1] * cat(Δx, Δx_resid, dims=1)
@@ -52,15 +54,33 @@ function forward_d(data::Array{Float32, 4}, beta::Vector{Float32}=[Float32(1), F
     Δy = beta[2] * cat(Δy, Δy_resid, dims=2)
 
     Δz = diff(data, dims=3)
-    Δz_resid = expand_dims(data[:, :, begin, :] - data[:, :, 3, :], 3)
+    Δz_resid = expand_dims(data[:, :, begin, :] - data[:, :, end, :], 3)
     Δz = beta[3] * cat(Δz, Δz_resid, dims=3)
 
     return Δx, Δy, Δz
 end
 
 
-function divergence(x::Array{Float32}, y::Array{Float32}, z::Array{Float32}, beta::Array{Float32, 3})
-    
+function divergence3d(x::Array{Float32, 4}, 
+                    y::Array{Float32, 4}, 
+                    z::Array{Float32, 4}, 
+                    beta::Vector{Float32}=[Float32(1), Float32(1), Float32(0)])
+
+    @assert length(beta) == 3 "beta param. must have 3 elements"
+
+    Δdim = -diff(x, dims=1)
+    Δdim_resid = expand_dims(x[begin, :, :, :] - x[end, :, :, :], 1)
+    div = beta[1] * cat(Δdim_resid, Δdim, dims=1)
+
+    Δdim = -diff(y, dims=2)
+    Δdim_resid = expand_dims(y[:, end, :, :] - y[:, begin, :, :], 2)
+    div += beta[2] * cat(Δdim_resid, Δdim, dims=2)
+
+    Δdim = -diff(z, dims=3)
+    Δdim_resid = expand_dims(z[:, :, end, :] - y[:, :, begin, :], 3)
+    div += beta[3] * cat(Δdim_resid, Δdim, dims=3)
+
+    return div
 end
 
 
