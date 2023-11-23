@@ -16,6 +16,7 @@ dependencies = [
     "Images",
     "ImageShow",
     "ImageView",
+    "TestImages"
     "ImageTransformations",
     "DSP",
     "FixedPointNumbers",

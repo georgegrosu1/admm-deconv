@@ -1,9 +1,9 @@
 using ImageFiltering, Images, ColorVectorSpace, ColorTypes, FFTW, Flux, DSP
 
 
-function expand_dims(arr::Array, dim_id::Int64)
+function expand_dims(arr::Array, dim_idx::Int64)
     s = [size(arr)...]
-    insert!(s, dim_id, 1)
+    insert!(s, dim_idx, 1)
     return reshape(arr, s...)
 end
 
@@ -42,7 +42,7 @@ function fftnMatLike(input_arr::Array, out_shape::Tuple)::Array{ComplexF32}
 end
 
 
-function forward_diff3d(data::Array{Float32, 4}, beta::Vector{Float32}=[Float32(1), Float32(1), Float32(0)])
+function forward_diff3d(data::Array{Float32, 4}, beta::Vector{Float32}=[Float32(1), Float32(1), Float32(0)])::Tuple{Array{Float32,4}, Array{Float32, 4}, Array{Float32, 4}} 
     @assert length(beta) == 3 "beta param. must have 3 elements"
 
     Δx = diff(data, dims=1)
@@ -64,7 +64,7 @@ end
 function divergence3d(x::Array{Float32, 4}, 
                       y::Array{Float32, 4}, 
                       z::Array{Float32, 4}, 
-                      beta::Vector{Float32}=[Float32(1), Float32(1), Float32(0)])
+                      beta::Vector{Float32}=[Float32(1), Float32(1), Float32(0)])::Array{Float32, 4}
 
     @assert length(beta) == 3 "beta param. must have 3 elements"
 
@@ -81,25 +81,4 @@ function divergence3d(x::Array{Float32, 4},
     div += beta[3] * cat(Δdim_resid, Δdim, dims=3)
 
     return div
-end
-
-
-function convolve(input_arr::Array{T}, kernel::Array{T}, mode::String="full")
-    @assert ndims(input_arr) == ndims(kernel) "Input and kernel must have same number of dimensions"
-    conv_out = DSP.conv(input_arr, kernel)
-    if mode == "full"
-        return conv_out
-    elseif mode == "same"
-        start_end_idxs = ()
-        input_size = size(input_arr)
-        kern_size = size(kernel)
-        out_size = size(conv_out)
-        for i=1:ndims(conv_out)
-            out_dim_diff = out_size[i] - max(input_size[i], kern_size[i])
-            cut_left = out_dim_diff % 2 == 0 ? div(out_dim_diff, 2) : div(out_dim_diff, 2) + 1
-            cut_right = div(out_dim_diff, 2)
-            start_end_idxs = (start_end_idxs..., (cut_left, cut_right))
-        end
-    end
-
 end
