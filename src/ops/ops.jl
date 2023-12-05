@@ -22,7 +22,7 @@ end
 function admm_tv_deconv(input::Array{Float32, 4}, 
                         kern::Array{Float32, 4}, 
                         num_iters::Int32,
-                        regularize_val::Float32, 
+                        λ::Float32, 
                         cfgs::ADMMSettings)::Array{Float32, 4}
 
     input_size = size(input)
@@ -67,7 +67,7 @@ function admm_tv_deconv(input::Array{Float32, 4},
         u_Δz = v_Δz .* u_sqSum
 
         # Perform the R-subproblem
-        r_Δ = max.(abs.(Γ .+ 1 / cfgs.rho_o .* cfgs.z) .- regularize_val / cfgs.rho_o, 0) .* sign.(Γ .+ 1 / cfgs.rho_o * cfgs.z)
+        r_Δ = max.(abs.(Γ .+ 1 / cfgs.rho_o .* cfgs.z) .- λ / cfgs.rho_o, 0) .* sign.(Γ .+ 1 / cfgs.rho_o * cfgs.z)
         
         # Perform the F-subproblem
         rhs = cfgs.rho_o .* Htg .+ imfilter(cfgs.rho_o .* r_Δ, kern, "circular") + divergence3d(cfgs.rho_r .* u_Δx .- cfgs.lGrange_M1, cfgs.rho_r .* u_Δy .- cfgs.lGrange_M2, cfgs.rho_r .* u_Δz .- cfgs.lGrange_M3)

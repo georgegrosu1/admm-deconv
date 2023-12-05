@@ -42,7 +42,7 @@ function fftnMatLike(input_arr::Array, out_shape::Tuple)::Array{ComplexF32}
 end
 
 
-function forward_diff3d(data::Array{Float32, 4}, beta::Vector{Float32}=[Float32(1), Float32(1), Float32(0)])::Tuple{Array{Float32,4}, Array{Float32, 4}, Array{Float32, 4}} 
+function forward_diff3d(data::Array{Float32, 4}, beta::Vector{Float32}=[1f0, 1f0, 1f0])::Tuple{Array{Float32,4}, Array{Float32, 4}, Array{Float32, 4}} 
     @assert length(beta) == 3 "beta param. must have 3 elements"
 
     Δx = diff(data, dims=1)
@@ -64,7 +64,7 @@ end
 function divergence3d(x::Array{Float32, 4}, 
                       y::Array{Float32, 4}, 
                       z::Array{Float32, 4}, 
-                      beta::Vector{Float32}=[Float32(1), Float32(1), Float32(0)])::Array{Float32, 4}
+                      beta::Vector{Float32}=[1f0, 1f0, 0f0])::Array{Float32, 4}
 
     @assert length(beta) == 3 "beta param. must have 3 elements"
 
