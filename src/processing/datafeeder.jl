@@ -31,12 +31,16 @@ function Base.length(dataset::ImageDataFeeder)
 end
 
 
-function Base.getindex(dataset::ImageDataFeeder, idxs::Union{UnitRange,Vector})
+function Base.getindex(dataset::ImageDataFeeder, idxs::Union{UnitRange, Vector, Integer})
+    if typeof(idxs) <: Integer
+        idxs = Vector{Integer}([idxs])
+    end
+    
     batch_in = map(idx -> img2tensor(Images.load(dataset.x_data[idx])), idxs)
     batch_gt = map(idx -> img2tensor(Images.load(dataset.y_data[idx])), idxs)
 
-    batch_x = @pipe cat(batch_in..., dims=4)
-    batch_y = @pipe cat(batch_gt..., dims=4)
+    batch_x = @pipe cat(batch_in..., dims=ndims(batch_in[end])+1)
+    batch_y = @pipe cat(batch_gt..., dims=ndims(batch_gt[end])+1)
 
     return batch_x, batch_y
 end
