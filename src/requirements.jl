@@ -2,6 +2,7 @@ using Pkg
 println(Pkg.status())
 
 dependencies = [
+    "ProgressBars",
     "Glob",
     "IterTools",
     "Plots",
@@ -33,7 +34,9 @@ dependencies = [
     "CUDA",
     "Zygote",
     "NNlib",
-    "Flux"
+    "MLUtils",
+    "Flux",
+    "BSON"
 ]
 
 Pkg.add(dependencies)

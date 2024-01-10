@@ -1,4 +1,5 @@
 using Flux, Zygote, NNlib, DeconvOptim
+include("../ops/ops.jl")
 
 
 #------------------------------------------------------------------------------------------------------------------------------
@@ -26,8 +27,8 @@ function ADMMDeconv(k::NTuple{N,Integer},
                     groups = 1,
                     b = true) where N
 
-  weight = Flux.convfilter(k, ch; init=init, groups=groups)
-  λ = Flux.glorot_uniform(3)
+  weight = Flux.convfilter(k, 1=>1; init=init, groups=groups)
+  λ = Flux.glorot_uniform(1)
   bias_w = Flux.create_bias(weight, b, 1)
   ADMMDeconv(weight, σ, bias_w, λ)
 end
@@ -39,10 +40,10 @@ Flux.@functor ADMMDeconv weight, bias, λ
 function (d::ADMMDeconv)(x::AbstractArray)
 
   σ = NNlib.fast_act(d.σ, x)
-  # xT = Flux._match_eltype(d, x)
+  xT = Flux._match_eltype(d, x)
 
-  # res, _ = DeconvOptim.deconvolution(xT, d.weight, regularizer=TV(num_dims=Flux.ndims(xT), sum_dims=[1, 2], weights=d.λ))
-  res = x .* d.bias
+  res = tvd_fft(xT, d.λ; h=d.weight)
+  res = res .* d.bias
   
   return σ.(res)
 end

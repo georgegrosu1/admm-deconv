@@ -1,95 +1,104 @@
-using FFTW, DSP, ImageFiltering, Flux
+using FFTW, DSP, ImageFiltering, NNlib, Flux
 using Images, ColorVectorSpace, ColorTypes
 
 include("../utilities/base_funcs.jl")
 
 
+"""
+    tvd_fft(y::Array{<:Real,N}, λ, ρ=1; maxit=100, tol=1e-2, verbose=true)
 
-Base.@kwdef mutable struct ADMMSettings 
-    rho_r::Float32 = 2.0
-    rho_o::Float32 = 50.0
-    beta::Vector{Float32} = [1.f0, 1.f0, 2.5f0]
-    gamma::Float32 = 2.0
-    max_iter::UInt32 = 20
-    alpha::Float32 = 0.7
-    lGrange_M1::Array{Float32} = Array{Float32}(undef)
-    lGrange_M2::Array{Float32} = Array{Float32}(undef)
-    lGrange_M3::Array{Float32} = Array{Float32}(undef)
-    z::Array{Float32} = Array{Float32}(undef)
+2D anisotropic TV denoising with periodic boundary conditions via ADMM. 
+Accepts 2D, 3D, 4D tensors in (H,W,C,B) form, where the last two
+dimensions are optional.
+"""
+HT(x,τ) = x*(abs(x) > τ);                      # hard-thresholding
+ST(x,τ) = sign.(x).*max.(abs.(x).-τ, 0);       # soft-thresholding
+pixelnorm(x) = sqrt.(sum(abs2, x, dims=(3,4))) # 2-norm on 4D image-tensor pixel-vectors
+BT(x,τ) = max.(1 .- τ ./ pixelnorm(x), 0).*x   # block-thresholding
+
+objfun_iso(x,Dx,y,λ)   = 0.5*sum(abs2.(x-y)) + λ*norm(pixelnorm(Dx), 1) 
+objfun_aniso(x,Dx,y,λ) = 0.5*sum(abs2.(x-y)) + λ*norm(Dx, 1)
+
+function fdkernel(T::Type)
+	W = zeros(T, 2,2,1,2)
+	W[:,:,1,1] = [1 -1; 0 0]; 
+	W[:,:,1,2] = [1  0;-1 0]; 
+	Wᵀ = reverse(permutedims(W, (2,1,4,3)), dims=:);
+	return W, Wᵀ
 end
 
 
-function admm_tv_deconv(input::Array{Float32, 4}, 
-                        kern::Array{Float32, 4}, 
-                        num_iters::Int32,
-                        λ::Float32, 
-                        cfgs::ADMMSettings)::Array{Float32, 4}
+function tvd_fft(y::AbstractArray, λ, ρ=1; h=missing, isotropic=false, maxit=100, tol=1e-2, verbose=true) 
+	M, N, P, _ = size(y)
+	y = permutedims(y, (1,2,4,3)) # move channels to batch dimension
+	τ = λ / ρ;
 
-    input_size = size(input)
+	if !ismissing(h)
+		hh = NNlib.pad_constant(h, ((0, M-size(h)[1]), (0, N-size(h)[2])))
+		Σ = rfft(hh)
+	else
+		Σ = 1
+	end
 
-    cfgs.lGrange_M1 = zeros(Float32, input_size)
-    cfgs.lGrange_M2 = zeros(Float32, input_size)
-    cfgs.lGrange_M3 = zeros(Float32, input_size)
-    cfgs.z = zeros(Float32, input_size)
+	# precompute C for x-update
+	Λx = rfft([1 -1 zeros(N-2)'; zeros(M-1,N)]);
+	Λy = rfft([[1; -1; zeros(M-2)] zeros(M,N-1)])
+	C = 1 ./ ( abs2.(Σ) .+ ρ.*(abs2.(Λx) .+ abs2.(Λy)) )
 
-    restored = input
+	# real Fourier xfrm in image dimension.
+	# Must specify length of first dimension for inverse.
+	Q  = plan_rfft(y,(1,2)); 
+	Qᴴ = plan_irfft(rfft(y),M,(1,2));
 
-    if ndims(kern) < ndims(input)
-        kern = expand_dims(kern, ndims(kern) + 1)
-    end
+	if isotropic
+		objfun = (x,Dx) -> objfun_iso(x,Dx,y,λ)
+		T = BT # block-thresholding
+	else
+		objfun = (x,Dx) -> objfun_aniso(x,Dx,y,λ)
+		T = ST # soft-thresholding
+	end
 
-    bandpass_kern_x = expand_dims(expand_dims(expand_dims(Float32.([1, -1]), 2), 3), 4)
-    bandpass_kern_y = expand_dims(expand_dims(Float32.([1 -1]), 3), 4)
-    bandpass_kern_z = expand_dims(expand_dims(Float32.([1 -1]), 3), 1)
-    
-    eigHtH = abs.(fftnMatLike(kern, input_size)).^2
-    eigDtD = abs.(cfgs.beta[1] .* fftnMatLike(bandpass_kern_x, input_size)).^2 + abs.(cfgs.beta[2] .* fftnMatLike(collect(bandpass_kern_y), input_size)).^2
-    eigEtE = input_size[end] > 1 ? abs.(cfgs.beta[3] .* fftnMatLike(bandpass_kern_z, input_size)).^2 : 0;
+	# initialization
+	x = zeros(M,N,1,P);
+	Dxᵏ = zeros(M,N,2,P);
+	z = zeros(M,N,2,P);
+	u = zeros(M,N,2,P);
 
-    Htg = imfilter(input, kern, "circular")
+	# conv kernel
+	W, Wᵀ = fdkernel(eltype(y))
 
-    Δx, Δy, Δz = forward_diff3d(input)
-    Γ = imfilter(restored, kern, "circular") - input
-    rNorm = sqrt(norm(Δx)^2 + norm(Δy)^2 + norm(Δz)^2)
+	# (in-place) Circular convolution
+	cdims = DenseConvDims(NNlib.pad_circular(x, (1,0,1,0)), W);
+	cdimsᵀ= DenseConvDims(NNlib.pad_circular(z, (0,1,0,1)), Wᵀ);
+	D!(z,x) = NNlib.conv!(z, NNlib.pad_circular(x, (1,0,1,0)), W, cdims);
+	Dᵀ!(x,z)= NNlib.conv!(x, NNlib.pad_circular(z, (0,1,0,1)), Wᵀ,cdimsᵀ);
+	D(x) = NNlib.conv(NNlib.pad_circular(x, (1,0,1,0)), W, cdims);
+	Dᵀ(z) = NNlib.conv(NNlib.pad_circular(z, (0,1,0,1)), Wᵀ,cdimsᵀ);
 
-    for _ in 1:num_iters
-    
-        # Perform the U-subproblem
-        v_Δx = Δx .+ (1 / cfgs.rho_r) .* cfgs.lGrange_M1
-        v_Δy = Δy .+ (1 / cfgs.rho_r) .* cfgs.lGrange_M2
-        v_Δz = Δz .+ (1 / cfgs.rho_r) .* cfgs.lGrange_M3
-        u_sqSum = sqrt.(v_Δx.^2 + v_Δy.^2 + v_Δz.^2)
-        u_sqSum[u_sqSum .== 0] .= nextfloat(typemin(Float32))
-        u_sqSum = max.(u_sqSum .- 1 / cfgs.rho_r) ./ u_sqSum
+	if !ismissing(h)
+		h = h[:,:,:,:]
+		hᵀ= rot180(h[:,:])[:,:,:,:]
+		padu, padd = ceil(Int,(size(h,1)-1)/2), floor(Int,(size(h,1)-1)/2)
+		padl, padr = ceil(Int,(size(h,2)-1)/2), floor(Int,(size(h,2)-1)/2)
+		pad1 = (padu, padd, padl, padr)
+		pad2 = (padd, padu, padr, padl)
+		# cdims reference being kept, rename variable to cdims2
+		cdims2 = DenseConvDims(NNlib.pad_circular(x, pad1), h);
+		cdims2ᵀ= DenseConvDims(NNlib.pad_circular(x, pad2), hᵀ);
+		H = x->NNlib.conv(NNlib.pad_circular(x, pad1), h, cdims2);
+		Hᵀ= x->NNlib.conv(NNlib.pad_circular(x, pad2), hᵀ,cdims2ᵀ);
+	else
+		H = identity
+		Hᵀ= identity
+	end
 
-        u_Δx = v_Δx .* u_sqSum
-        u_Δy = v_Δy .* u_sqSum
-        u_Δz = v_Δz .* u_sqSum
+	for _ in 1:maxit
+		x = Qᴴ*(C.*(Q*( Hᵀ(y) + ρ*Dᵀ(z-u) ))); # x update
+		D!(Dxᵏ,x);
+		z = T(Dxᵏ+u, τ);                      # z update
+		u = u + Dxᵏ - z;                      # dual ascent
+	end
+	x = permutedims(x, (1,2,4,3));
 
-        # Perform the R-subproblem
-        r_Δ = max.(abs.(Γ .+ 1 / cfgs.rho_o .* cfgs.z) .- λ / cfgs.rho_o, 0) .* sign.(Γ .+ 1 / cfgs.rho_o * cfgs.z)
-        
-        # Perform the F-subproblem
-        rhs = cfgs.rho_o .* Htg .+ imfilter(cfgs.rho_o .* r_Δ, kern, "circular") + divergence3d(cfgs.rho_r .* u_Δx .- cfgs.lGrange_M1, cfgs.rho_r .* u_Δy .- cfgs.lGrange_M2, cfgs.rho_r .* u_Δz .- cfgs.lGrange_M3)
-        eigA = cfgs.rho_o .* eigHtH .+ cfgs.rho_r .* eigDtD .+ cfgs.rho_r .* eigEtE
-        restored = real.(ifft(fft(rhs) ./ eigA))
-
-        # Update process parameters forward diffs, Lagrange multipliers, Gamma, z, rNorm
-        Δx, Δy, Δz = forward_diff3d(restored)
-        Γ = imfilter(restored, kern, "circular") - input
-
-        cfgs.lGrange_M1 -= cfgs.rho_r .* (u_Δx .- Δx)
-        cfgs.lGrange_M2 -= cfgs.rho_r .* (u_Δy .- Δy)
-        cfgs.lGrange_M3 -= cfgs.rho_r .* (u_Δz .- Δz)
-        cfgs.z .-= cfgs.rho_o .* (r_Δ .- Γ)
-
-        prev_rNorm = rNorm
-        rNorm = sqrt(norm(Δx .- u_Δx, 2)^2 + norm(Δy .- u_Δy, 2)^2 + norm(Δz .- u_Δz, 2)^2)
-
-        if rNorm > (cfgs.alpha * prev_rNorm)
-            cfgs.rho_r = cfgs.rho_r * cfgs.gamma
-        end
-    end
-
-    return restored
+	return x
 end

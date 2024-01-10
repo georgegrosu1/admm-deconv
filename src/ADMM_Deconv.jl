@@ -1,37 +1,38 @@
 module ADMM_Deconv
 
-using Flux, Plots, CUDA, TestImages, DSP, Noise, IterTools
+using Flux, Plots, CUDA, TestImages, DSP, Noise, IterTools, ProgressBars
 include("layers/deconv_admm.jl")
 include("utilities/base_funcs.jl")
+include("processing/datafeeder.jl")
 
 plotlyjs()
 
+train_set = ImageDataFeeder("D:/Projects/ISETC2022/dcnn-deblur/dataset/GOPRO_Large/train/x_set", "D:/Projects/ISETC2022/dcnn-deblur/dataset/GOPRO_Large/train/y_set", ".png", (16, 16), (16, 16), 8)
 
-data = testimage("mandril_color.tif")
-data_arr = img2tensor(data)
-data_arr = expand_dims(data_arr, 4)
+traintest = Flux.DataLoader(train_set, batchsize=4)
 
-psf = Float32.(generate_psf((size(data_arr)[1],size(data_arr)[2]), 3))
-psf = expand_dims(psf, 3)
-img_b = DeconvOptim.conv(data_arr, psf)
-img_n = Noise.poisson(img_b, 300)
+model_test = Chain(ADMMDeconv((1,1), 3=>3, relu), Conv((1,1), 3 => 3, relu))
 
-traintest = Flux.DataLoader((data=img_n, label=data_arr), batchsize=1) 
-@show size(traintest.data[1])
+# @show model(traintest.data[1][1])
 
-model = Chain(Conv((9,9), 3=>3, Flux.relu), Flux.relu)
+# evalcb = () -> @show(loss(img_n, data_arr))
+ps = Flux.params(model_test)
+opt = Flux.ADAM(0.0005)
 
-model(traintest.data[1])
+loss(x, y) = Flux.mse(model_test(x), y)
 
-loss_func(x, y) = Flux.mse.(model(x), y)
-evalcb = () -> @show(loss(img_n, data_arr))
-ps = Flux.params(model)
-@show ps
 
-optim = Flux.setup(Adam(0.005), model)
-for epoch in 1:1000
-  Flux.train!(loss_func, model, IterTools.ncycle(traintest, 10), optim)
+for epoch in 1:2
+  for (x,y) in ProgressBar(traintest)
+    gs = Flux.gradient(() -> loss(x, y), ps)
+    Flux.update!(opt,ps,gs)
+  end
 end
+
+
+# for epoch in 1:1000
+#   Flux.train!(loss_func, model_test, traintest, optim)
+# end
 
 # display(plot(x -> 2x-x^3, -2, 2, legend=false))
 # display(scatter!(x -> model([x]), -2:0.1f0:2))

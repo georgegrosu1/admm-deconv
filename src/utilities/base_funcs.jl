@@ -19,8 +19,8 @@ function UInt8Gray2arr(gray_img::Matrix{Gray{N0f8}})
 end
 
 
-function img2tensor(img_in::Matrix)
-    im_out = Float32.(reinterpret(reshape, N0f8, img_in) |> collect)
+function img2tensor(img_in::Matrix, convert_type=Float32)
+    im_out = convert_type.(reinterpret(reshape, eltype(img_in).types[1], img_in) |> collect)
     if ndims(im_out) == 3
         im_out = permutedims(im_out, (2, 3, 1))
     end
