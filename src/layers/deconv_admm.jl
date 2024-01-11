@@ -1,4 +1,4 @@
-using Flux, Zygote, NNlib, DeconvOptim
+using Flux
 include("../ops/ops.jl")
 
 

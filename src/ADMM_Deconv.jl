@@ -9,9 +9,9 @@ plotlyjs()
 
 train_set = ImageDataFeeder("D:/Projects/ISETC2022/dcnn-deblur/dataset/GOPRO_Large/train/x_set", "D:/Projects/ISETC2022/dcnn-deblur/dataset/GOPRO_Large/train/y_set", ".png", (16, 16), (16, 16), 8)
 
-traintest = Flux.DataLoader(train_set, batchsize=4)
+traintest = Flux.DataLoader(train_set, batchsize=1)
 
-model_test = Chain(ADMMDeconv((1,1), 3=>3, relu), Conv((1,1), 3 => 3, relu))
+model_test = Chain((ADMMDeconv((6,6), 3=>3, relu)), (Conv((1,1), 3 => 3, relu)))
 
 # @show model(traintest.data[1][1])
 
