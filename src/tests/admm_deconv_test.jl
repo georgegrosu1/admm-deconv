@@ -24,7 +24,7 @@ function main()
     psf_arr = Float32.(psf_arr)[:,:,:,:]
 
 
-    @time img_restored = tvd_fft(test_img, Float32(0.009), Float32(0.5); h=psf_arr, isotropic=true)
+    @time img_restored = tvd_fft(test_img, 0.9f-2, 0.5f0; h=psf_arr, isotropic=true)
 
     println("ADMM Test passed with no errors! ")
 
