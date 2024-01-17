@@ -1,4 +1,4 @@
-using TestImages, Plots
+using TestImages, Plots, CUDA
 
 include("../ops/ops.jl")
 
@@ -9,7 +9,7 @@ function main()
     # display(Plots.plot(img))
     # readline()
 
-    blur_psf = ImageFiltering.Kernel.gaussian(2)
+    blur_psf = ImageFiltering.Kernel.gaussian(0.5)
     test_img = ImageFiltering.imfilter(img, blur_psf)
 
 
@@ -24,7 +24,8 @@ function main()
     psf_arr = Float32.(psf_arr)[:,:,:,:]
 
 
-    @time img_restored = tvd_fft(test_img, 0.9f-2, 0.5f0; h=psf_arr, isotropic=true)
+    @time img_restored = tvd_fft_gpu(cu(test_img), CuArray{Float32}([0.9f-2]), CuArray{Float32}([0.5f0]), cu(psf_arr), true)
+    img_restored = Array{Float32}(img_restored)
 
     println("ADMM Test passed with no errors! ")
 

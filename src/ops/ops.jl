@@ -1,4 +1,4 @@
-using FFTW, DSP, ImageFiltering, NNlib, Flux, CUDA
+using FFTW, DSP, ImageFiltering, NNlib, Flux, CUDA, NNlibCUDA
 using Images, ColorVectorSpace, ColorTypes
 
 include("../utilities/base_funcs.jl")
@@ -11,22 +11,15 @@ include("../utilities/base_funcs.jl")
 Accepts 2D, 3D, 4D tensors in (H,W,C,B) form, where the last two
 dimensions are optional.
 """
-HT(x,τ) = x*(abs(x) > τ);                      # hard-thresholding
-ST(x,τ) = sign.(x).*max.(abs.(x).-τ, 0);       # soft-thresholding
+HT(x,τ) = x*(abs(x) > τ)                      # hard-thresholding
+ST(x,τ) = sign.(x).*max.(abs.(x).-τ, 0)       # soft-thresholding
 pixelnorm(x) = sqrt.(sum(abs2, x, dims=(3,4))) # 2-norm on 4D image-tensor pixel-vectors
 BT(x,τ) = max.(1 .- τ ./ pixelnorm(x), 0).*x   # block-thresholding
 objfun_iso(x,Dx,y,λ)   = 0.5*sum(abs2.(x-y)) + λ*norm(pixelnorm(Dx), 1) 
 objfun_aniso(x,Dx,y,λ) = 0.5*sum(abs2.(x-y)) + λ*norm(Dx, 1)
 
-function fdkernel(T::Type)
-	dx_prime = cat(cat(ones(T, 1), zeros(T, 1), dims=1), cat(-ones(T, 1), zeros(T, 1), dims=1), dims=2)
-	dx = cat(dx_prime, cat(cat(ones(T, 1), -ones(T, 1), dims=1), cat(zeros(T, 1), zeros(T, 1), dims=1), dims=2), dims=4)
-	dy = reverse(permutedims(dx, (2,1,4,3)), dims=:);
-	return dx, dy
-end
 
-
-function tvd_fft(y::AbstractArray{T}, λ, ρ=1; h::AbstractArray{T}=[], isotropic=false, maxit=100) where {T}
+function tvd_fft_cpu(y::AbstractArray{T}, λ, ρ=1; h::AbstractArray{T}=[], isotropic=false, maxit=100) where {T}
 	M, N, P, _ = size(y)
 	y = permutedims(y, (1,2,4,3)) # move channels to batch dimension
 	τ = λ / ρ;
@@ -61,7 +54,8 @@ function tvd_fft(y::AbstractArray{T}, λ, ρ=1; h::AbstractArray{T}=[], isotropi
 	u::AbstractArray{T} = zeros(T, M,N,2,P)
 
 	# conv kernel
-	W, Wᵀ = fdkernel(T)
+	W = Array{T}([1 -1; 0 0 ;;;; 1 0; -1 0])
+	Wᵀ = Array{T}([0 0; -1 1;;; 0 -1; 0 1;;;;])
 
 	# (in-place) Circular convolution
 	cdims = DenseConvDims(NNlib.pad_circular(x, (1,0,1,0)), W)
@@ -92,6 +86,84 @@ function tvd_fft(y::AbstractArray{T}, λ, ρ=1; h::AbstractArray{T}=[], isotropi
 		u = u + Dxᵏ - z;                      # dual ascent
 	end
 	x = permutedims(x, (1,2,4,3));
+
+	return x
+end
+
+
+function tvd_fft_gpu(y::CuArray{T}, λ::CuArray{T}, ρ::CuArray{T}=CuArray{T}([1]), h::CuArray{T}=CuArray([]), isotropic=false, maxit=100) where {T}
+	M, N, P, _ = CUDA.size(y)
+	y = CUDA.permutedims(y, (1,2,4,3)) # move channels to batch dimension
+	τ = λ ./ ρ
+
+	if CUDA.isempty(h)
+		Σ = CuArray{Float32}([1])
+	else
+		hh = NNlibCUDA.pad_constant(h, (0, M-size(h)[1], 0, N-size(h)[2], 0, 0, 0, 0))
+		# Σ = CUDA.CUFFT.rfft(hh)
+		Σ_ref = CUDA.CUFFT.rfft(hh[:,:,1,1])
+		Σ_ref = CUDA.cat(Σ_ref, CUDA.zeros(CUDA.eltype(Σ_ref), CUDA.size(Σ_ref)), dims=5)
+		Σ = Σ_ref[:,:,:,:,1]
+	end
+
+	# precompute C for x-update
+	# Compose Dx filter
+	dx_filter = CUDA.cat(CUDA.cat(CuArray{Float32}([1 -1]), CUDA.zeros((1,N-2)), dims=2), CUDA.zeros((M-1,N)), dims=1)
+	# Compose Dy filter
+	dy_filter = CUDA.cat(CUDA.cat(CuArray{Float32}([1; -1]), CUDA.zeros((M-2)), dims=1), CUDA.zeros((M,N-1)), dims=2)
+	Λx = CUDA.CUFFT.rfft(dx_filter)
+	Λy = CUDA.CUFFT.rfft(dy_filter)
+	C = 1 ./ ( CUDA.abs2.(Σ) .+ ρ.*(CUDA.abs2.(Λx) .+ CUDA.abs2.(Λy)) )
+
+	if isotropic
+		objfun = (x,Dx) -> objfun_iso(x,Dx,y,λ)
+		thresh_type = BT # block-thresholding
+	else
+		objfun = (x,Dx) -> objfun_aniso(x,Dx,y,λ)
+		thresh_type = ST # soft-thresholding
+	end
+
+	# initialization
+	x::CuArray{T} = CUDA.zeros(T, M,N,1,P)
+	Dxᵏ::CuArray{T} = CUDA.zeros(T, M,N,2,P)
+	z::CuArray{T} = CUDA.zeros(T, M,N,2,P)
+	u::CuArray{T} = CUDA.zeros(T, M,N,2,P)
+
+	# conv kernel
+	W = CuArray{T}([1 -1; 0 0 ;;;; 1 0; -1 0])
+	Wᵀ = CuArray{T}([0 0; -1 1;;; 0 -1; 0 1;;;;])
+
+	# (in-place) Circular convolution
+	cdims = DenseConvDims(Flux.pad_circular(x, (1,0,1,0)), W)
+	cdimsᵀ= DenseConvDims(Flux.pad_circular(z, (0,1,0,1)), Wᵀ)
+	D(x) = Flux.conv(Flux.pad_circular(x, (1,0,1,0)), W, cdims)
+	Dᵀ(z) = Flux.conv(Flux.pad_circular(z, (0,1,0,1)), Wᵀ,cdimsᵀ)
+
+	if isempty(h)
+		H = identity
+		Hᵀ= identity
+	else
+		hᵀ= CUDA.reverse(h)
+		padu, padd = CUDA.ceil(Int,(CUDA.size(h,1)-1)/2), CUDA.floor(Int,(CUDA.size(h,1)-1)/2)
+		padl, padr = CUDA.ceil(Int,(CUDA.size(h,2)-1)/2), CUDA.floor(Int,(CUDA.size(h,2)-1)/2)
+		pad1 = (padu, padd, padl, padr)
+		pad2 = (padd, padu, padr, padl)
+		# cdims reference being kept, rename variable to cdims2
+		cdims2 = DenseConvDims(Flux.pad_circular(x, pad1), h)
+		cdims2ᵀ= DenseConvDims(Flux.pad_circular(x, pad2), hᵀ)
+		H = x->Flux.conv(Flux.pad_circular(x, pad1), h, cdims2)
+		Hᵀ= x->Flux.conv(Flux.pad_circular(x, pad2), hᵀ,cdims2ᵀ)
+	end
+
+	for _ in 1:maxit
+		x = CUDA.CUFFT.irfft(C.*(CUDA.CUFFT.rfft( Hᵀ(y) + ρ .* Dᵀ(z-u), (1,2) )), M, (1,2)) # x update
+		Dxᵏ = D(x)
+		# z update
+		z = thresh_type(Dxᵏ+u, τ)
+		# dual ascent
+		u = u + Dxᵏ - z
+	end
+	x = CUDA.permutedims(x, (1,2,4,3))
 
 	return x
 end

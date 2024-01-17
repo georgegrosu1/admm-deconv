@@ -34,6 +34,7 @@ dependencies = [
     "CUDA",
     "Zygote",
     "NNlib",
+    "NNlibCUDA",
     "MLUtils",
     "Flux",
     "BSON"
