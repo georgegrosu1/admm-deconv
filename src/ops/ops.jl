@@ -3,13 +3,8 @@ using  Flux, CUDA, NNlibCUDA
 include("../utilities/base_funcs.jl")
 
 
-"""
-    tvd_fft(y::Array{<:Real,N}, λ, ρ=1; maxit=100, tol=1e-2, verbose=true)
+CGPUArray = Union{AbstractArray{T}, CuArray{T}} where {T}
 
-2D anisotropic TV denoising with periodic boundary conditions via ADMM. 
-Accepts 2D, 3D, 4D tensors in (H,W,C,B) form, where the last two
-dimensions are optional.
-"""
 HT(x,τ) = x*(abs(x) > τ)                      # hard-thresholding
 ST(x,τ) = sign.(x).*max.(abs.(x).-τ, 0)       # soft-thresholding
 pixelnorm(x) = sqrt.(sum(abs2, x, dims=(3,4))) # 2-norm on 4D image-tensor pixel-vectors
@@ -90,7 +85,7 @@ function tvd_fft_cpu(y::AbstractArray{T}, λ, ρ=1; h::AbstractArray{T}=[], isot
 end
 
 
-function tvd_fft_gpu(y::CuArray{T}, λ::CuArray, ρ::CuArray=CuArray([1]), h::CuArray=CuArray([]), isotropic=false, maxit=100) where {T}
+function tvd_fft_gpu(y::CGPUArray{T}, λ::CGPUArray{T}, ρ::CGPUArray{T}=CuArray([1]), h::CGPUArray{T}=CuArray([]), isotropic=false, maxit=100) where {T}
 	M, N, P, _ = CUDA.size(y)
 	y = CUDA.permutedims(y, (1,2,4,3)) # move channels to batch dimension
 	τ = λ ./ ρ
@@ -128,15 +123,14 @@ function tvd_fft_gpu(y::CuArray{T}, λ::CuArray, ρ::CuArray=CuArray([1]), h::Cu
 	z::CuArray{T} = CUDA.zeros(T, M,N,2,P)
 	u::CuArray{T} = CUDA.zeros(T, M,N,2,P)
 
-	# conv kernel
+	# W conv kernel
 	W1 = CUDA.cat(CUDA.cat(CUDA.ones(1,1), -CUDA.ones(1,1), dims=2), CUDA.zeros(1,2), dims=1)
 	W2 = CUDA.cat(CUDA.cat(CUDA.ones(1), -CUDA.ones(1), dims=1), CUDA.zeros(2), dims=2)
 	W = CUDA.cat(W1, W2, dims=4)
-	# W = Flux.Array{T}([1 -1; 0 0 ;;;; 1 0; -1 0])
+	# Wᵀ conv kernel
 	Wt1 = CUDA.cat(CUDA.zeros(1,2), CUDA.cat(-CUDA.ones(1,1), CUDA.ones(1,1), dims=2), dims=1)
 	Wt2 = CUDA.cat(CUDA.zeros(2), CUDA.cat(-CUDA.ones(1), CUDA.ones(1), dims=1), dims=2)
 	Wᵀ = CUDA.permutedims(CUDA.cat(Wt1, Wt2, dims=4), (1,2,4,3))
-	# Wᵀ = Flux.Array{T}([0 0; -1 1;;; 0 -1; 0 1;;;;])
 
 	# (in-place) Circular convolution
 	cdims = DenseConvDims(NNlibCUDA.pad_circular(x, (1,0,1,0)), W)
@@ -161,7 +155,8 @@ function tvd_fft_gpu(y::CuArray{T}, λ::CuArray, ρ::CuArray=CuArray([1]), h::Cu
 	end
 
 	for _ in 1:maxit
-		x = CUDA.CUFFT.irfft(C.*(CUDA.CUFFT.rfft( Hᵀ(y) + ρ .* Dᵀ(z-u), (1,2) )), M, (1,2)) # x update
+		# x update
+		x = CUDA.CUFFT.irfft(C.*(CUDA.CUFFT.rfft( Hᵀ(y) + ρ .* Dᵀ(z-u), (1,2) )), M, (1,2))
 		Dxᵏ = D(x)
 		# z update
 		z = thresh_type(Dxᵏ+u, τ)

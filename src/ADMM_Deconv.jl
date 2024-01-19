@@ -12,11 +12,11 @@ Zygote.@nograd CUDA.zeros
 
 # plotlyjs()
 
-train_set = ImageDataFeeder("D:/Projects/ISETC2022/dcnn-deblur/dataset/GOPRO_Large/train/x_set", "D:/Projects/ISETC2022/dcnn-deblur/dataset/GOPRO_Large/train/y_set", ".png", (16, 16), (16, 16), 8)
+train_set = ImageDataFeeder("D:/Projects/ISETC2022/dcnn-deblur/dataset/GOPRO_Large/train/x_set", "D:/Projects/ISETC2022/dcnn-deblur/dataset/GOPRO_Large/train/y_set", ".png", (128, 128), (128, 128))
 
 traintest = Flux.DataLoader(train_set, batchsize=1)|>gpu
 
-model_test = Chain((ADMMDeconv((6,6), 3=>3, relu)), (Conv((1,1), 3 => 3, relu)))|>gpu
+model_test = Chain((ADMMDeconv((4,4), 3=>3, relu)))|>gpu
 
 # @show model(traintest.data[1][1])
 
@@ -24,13 +24,15 @@ model_test = Chain((ADMMDeconv((6,6), 3=>3, relu)), (Conv((1,1), 3 => 3, relu)))
 ps = Flux.params(model_test)
 opt = Flux.ADAM(0.0005)
 
-loss(x, y) = Flux.mse(model_test(x), y)
+loss(x, y) = Flux.mse(model_test(x), y)|>gpu
 
 
 for epoch in 1:2
   for (x,y) in ProgressBar(traintest)
     gs = Flux.gradient(() -> loss(x, y), ps)
     Flux.update!(opt,ps,gs)
+
+    print("Loss function (MSE)=", loss(x, y))
   end
 end
 

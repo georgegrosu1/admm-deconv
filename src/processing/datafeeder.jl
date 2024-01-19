@@ -7,7 +7,6 @@ mutable struct ImageDataFeeder{T, M}
     y_data::Vector{T}
     x_shape::Tuple{M, M}
     y_shape::Tuple{M, M}
-    batch_size::Int32
     shuffle::Bool
 
     function ImageDataFeeder(x_source::AbstractString = "", 
@@ -15,14 +14,29 @@ mutable struct ImageDataFeeder{T, M}
                              extension::String = ".png",
                              x_targe_shape::Tuple{Integer, Integer} = (),
                              y_target_shape::Tuple{Integer, Integer} = (),
-                             batch_size::Integer = 1,
                              shuffle::Bool = false)
         
         x_paths = Glob.glob("*" * extension, x_source)
         y_paths = Glob.glob("*" * extension, y_source)
 
-        return new{typeof(x_source), typeof(x_targe_shape[1])}(x_paths, y_paths, x_targe_shape, y_target_shape, batch_size, shuffle)
+        return new{typeof(x_source), typeof(x_targe_shape[1])}(x_paths, y_paths, x_targe_shape, y_target_shape, shuffle)
     end
+end
+
+
+function get_image(data::Vector, idx::Integer, target_shape::Tuple{Integer, Integer})
+    img = img2tensor(Images.load(data[idx]))
+
+    if (target_shape[1] > size(img)[1]) || (target_shape[2] > size(img)[2])
+        @warn "Desired target shape is greater than the maximum size of the target image. Complete image will be returned"
+        
+        return img
+    end
+    
+    h_ref = rand(1:(size(img)[1]-target_shape[1]+1))
+    w_ref = rand(1:(size(img)[2]-target_shape[2]+1))
+
+    return img[h_ref:(h_ref+target_shape[1]-1), w_ref:(w_ref+target_shape[2]-1), :]
 end
 
 
@@ -36,8 +50,8 @@ function Base.getindex(dataset::ImageDataFeeder, idxs::Union{UnitRange, Vector, 
         idxs = Vector{Integer}([idxs])
     end
     
-    batch_in = map(idx -> img2tensor(Images.load(dataset.x_data[idx])), idxs)
-    batch_gt = map(idx -> img2tensor(Images.load(dataset.y_data[idx])), idxs)
+    batch_in = map(idx -> get_image(dataset.x_data, idx, dataset.x_shape), idxs)
+    batch_gt = map(idx -> get_image(dataset.y_data, idx, dataset.y_shape), idxs)
 
     batch_x = @pipe cat(batch_in..., dims=ndims(batch_in[end])+1)
     batch_y = @pipe cat(batch_gt..., dims=ndims(batch_gt[end])+1)
