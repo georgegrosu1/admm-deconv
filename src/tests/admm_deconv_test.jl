@@ -9,7 +9,7 @@ function main()
     # display(Plots.plot(img))
     # readline()
 
-    blur_psf = ImageFiltering.Kernel.gaussian(0.5)
+    blur_psf = ImageFiltering.Kernel.gaussian(1)
     test_img = ImageFiltering.imfilter(img, blur_psf)
 
 
@@ -24,7 +24,7 @@ function main()
     psf_arr = Float32.(psf_arr)[:,:,:,:]
 
 
-    @time img_restored = tvd_fft_gpu(cu(test_img), CuArray{Float32}([0.9f-2]), CuArray{Float32}([0.5f0]), cu(psf_arr), true)
+    @time img_restored = tvd_fft_gpu(cu(test_img), cu([0.9f-2]), cu([0.5f0]), cu(psf_arr), true)
     img_restored = Array{Float32}(img_restored)
 
     println("ADMM Test passed with no errors! ")

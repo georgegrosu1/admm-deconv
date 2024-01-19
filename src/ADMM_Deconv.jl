@@ -1,17 +1,22 @@
 module ADMM_Deconv
 
-using Flux, Plots, CUDA, TestImages, DSP, Noise, IterTools, ProgressBars
+
+using Flux, Plots, CUDA, TestImages, DSP, Noise, IterTools, ProgressBars, Zygote
 include("layers/deconv_admm.jl")
 include("utilities/base_funcs.jl")
 include("processing/datafeeder.jl")
 
-plotlyjs()
+# Avoid Zygote issue with no gradients defined for primitive CUDA kernels such as CUDA.ones / CUDA.zeros
+Zygote.@nograd CUDA.ones
+Zygote.@nograd CUDA.zeros
+
+# plotlyjs()
 
 train_set = ImageDataFeeder("D:/Projects/ISETC2022/dcnn-deblur/dataset/GOPRO_Large/train/x_set", "D:/Projects/ISETC2022/dcnn-deblur/dataset/GOPRO_Large/train/y_set", ".png", (16, 16), (16, 16), 8)
 
-traintest = Flux.DataLoader(train_set, batchsize=1)
+traintest = Flux.DataLoader(train_set, batchsize=1)|>gpu
 
-model_test = Chain((ADMMDeconv((6,6), 3=>3, relu)), (Conv((1,1), 3 => 3, relu)))
+model_test = Chain((ADMMDeconv((6,6), 3=>3, relu)), (Conv((1,1), 3 => 3, relu)))|>gpu
 
 # @show model(traintest.data[1][1])
 

@@ -1,4 +1,4 @@
-using Flux
+using Flux, CUDA, NNlibCUDA
 include("../ops/ops.jl")
 
 
@@ -39,10 +39,10 @@ Flux.@functor ADMMDeconv weight, bias, λ
 
 function (d::ADMMDeconv)(x::AbstractArray)
 
-  σ = NNlib.fast_act(d.σ, x)
-  xT = Flux._match_eltype(d, x)
+  # σ = NNlibCUDA.fast_act(d.σ, x)
+  # xT = Flux._match_eltype(d, x)
 
-  res = tvd_fft(xT, d.λ; h=d.weight)
+  res = tvd_fft_gpu(x, d.λ, CuArray{Float32}([1]), d.weight)
   res = res .* d.bias
   
   return σ.(res)

@@ -27,16 +27,16 @@ dependencies = [
     "Noise",
     "DSP",
     "FixedPointNumbers",
-    "DeconvOptim",
     "ImageIO",
     "ImageFiltering",
-    "cuDNN",
     "CUDA",
+    "cuDNN",
     "Zygote",
     "NNlib",
     "NNlibCUDA",
     "MLUtils",
     "Flux",
+    "DeconvOptim",
     "BSON"
 ]
 
