@@ -14,7 +14,7 @@ objfun_aniso(x,Dx,y,λ) = 0.5*sum(abs2.(x-y)) + λ*norm(Dx, 1)
 
 
 function tvd_fft_cpu(y::AbstractArray{T}, λ, ρ=1; h::AbstractArray{T}=[], isotropic=false, maxit=100) where {T}
-	M, N, P, _ = size(y)
+	M, N, P, B = size(y)
 	y = permutedims(y, (1,2,4,3)) # move channels to batch dimension
 	τ = λ ./ ρ
 
@@ -46,23 +46,24 @@ function tvd_fft_cpu(y::AbstractArray{T}, λ, ρ=1; h::AbstractArray{T}=[], isot
 	end
 
 	# initialization
-	x::AbstractArray{T} = zeros(T, M,N,1,P)
-	Dxᵏ::AbstractArray{T} = zeros(T, M,N,2,P)
-	z::AbstractArray{T} = zeros(T, M,N,2,P)
-	u::AbstractArray{T} = zeros(T, M,N,2,P)
+	x::AbstractArray{T} = zeros(T, M,N,B,P)
+	Dxᵏ::AbstractArray{T} = zeros(T, M,N,2*B,P)
+	z::AbstractArray{T} = zeros(T, M,N,2*B,P)
+	u::AbstractArray{T} = zeros(T, M,N,2*B,P)
 
 	# W conv kernel
 	W1 = cat(cat(ones(1,1), -ones(1,1), dims=2), zeros(1,2), dims=1)
 	W2 = cat(cat(ones(1), -ones(1), dims=1), zeros(2), dims=2)
-	W = cat(W1, W2, dims=4)
+	W = repeat(cat(W1, W2, dims=4), 1,1,1,B)
 	# Wᵀ conv kernel
 	Wt1 = cat(zeros(1,2), cat(-ones(1,1),ones(1,1), dims=2), dims=1)
 	Wt2 = cat(zeros(2), cat(-ones(1),ones(1), dims=1), dims=2)
 	Wᵀ = permutedims(cat(Wt1, Wt2, dims=4), (1,2,4,3))
+	Wᵀ = repeat(Wᵀ, 1,1,1,B)
 
 	# (in-place) Circular convolution
-	cdims = DenseConvDims(NNlib.pad_circular(x, (1,0,1,0)), W)
-	cdimsᵀ= DenseConvDims(NNlib.pad_circular(z, (0,1,0,1)), Wᵀ)
+	cdims = DenseConvDims(NNlib.pad_circular(x, (1,0,1,0)), W, groups=B)
+	cdimsᵀ= DenseConvDims(NNlib.pad_circular(z, (0,1,0,1)), Wᵀ, groups=B)
 	D(x) = NNlib.conv(NNlib.pad_circular(x, (1,0,1,0)), W, cdims)
 	Dᵀ(z) = NNlib.conv(NNlib.pad_circular(z, (0,1,0,1)), Wᵀ,cdimsᵀ)
 
@@ -70,14 +71,15 @@ function tvd_fft_cpu(y::AbstractArray{T}, λ, ρ=1; h::AbstractArray{T}=[], isot
 		H = identity
 		Hᵀ= identity
 	else
+		h = repeat(h, 1,1,1,B)
 		hᵀ= reverse(h)
 		padu, padd = ceil(Int,(size(h,1)-1)/2), floor(Int,(size(h,1)-1)/2)
 		padl, padr = ceil(Int,(size(h,2)-1)/2), floor(Int,(size(h,2)-1)/2)
 		pad1 = (padu, padd, padl, padr)
 		pad2 = (padd, padu, padr, padl)
 		# cdims reference being kept, rename variable to cdims2
-		cdims2 = DenseConvDims(NNlib.pad_circular(x, pad1), h)
-		cdims2ᵀ= DenseConvDims(NNlib.pad_circular(x, pad2), hᵀ)
+		cdims2 = DenseConvDims(NNlib.pad_circular(x, pad1), h, groups=B)
+		cdims2ᵀ= DenseConvDims(NNlib.pad_circular(x, pad2), hᵀ, groups=B)
 		H = x->NNlib.conv(NNlib.pad_circular(x, pad1), h, cdims2)
 		Hᵀ= x->NNlib.conv(NNlib.pad_circular(x, pad2), hᵀ,cdims2ᵀ)
 	end
