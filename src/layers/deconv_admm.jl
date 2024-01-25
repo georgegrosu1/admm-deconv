@@ -3,47 +3,45 @@ include("../ops/ops.jl")
 
 
 #------------------------------------------------------------------------------------------------------------------------------
-struct ADMMDeconv{F,A,N,V}
+struct ADMMDeconv{F,A,N,V,M}
   σ::F
   weight::A
   bias::V
   λ::N
+  ρ::M
 end
 
 
 function ADMMDeconv(w::AbstractArray{T,N}, 
                     σ,
                     b,
-                    lambda) where {T,N}
+                    lambda,
+                    rho) where {T,N}
 
-  return ADMMDeconv(σ, w, b, lambda)
+  return ADMMDeconv(σ, w, b, lambda, rho)
 end
 
 
-function ADMMDeconv(k::NTuple{N,Integer}, 
-                    ch::Pair{<:Integer,<:Integer}, 
+function ADMMDeconv(k::NTuple{N,Integer},
                     σ = Flux.identity; 
                     init = Flux.glorot_uniform, 
                     groups = 1,
-                    b = true) where N
+                    b = true) where {N}
 
   weight = Flux.convfilter(k, 1=>1; init=init, groups=groups)
-  λ = Flux.glorot_uniform(1)
+  λ = abs.(Flux.glorot_uniform(1))
+  ρ = abs.(Flux.glorot_uniform(1))
   bias_w = Flux.create_bias(weight, b, 1)
-  ADMMDeconv(weight, σ, bias_w, λ)
+  ADMMDeconv(weight, σ, bias_w, λ, ρ)
 end
 
 
-Flux.@functor ADMMDeconv weight, bias, λ
+Flux.@functor ADMMDeconv weight, bias, λ, ρ
 
 
 function (d::ADMMDeconv)(x::AbstractArray)
-
-  # σ = NNlibCUDA.fast_act(d.σ, x)
-  # xT = Flux._match_eltype(d, x)
-
-  res = tvd_fft_gpu(x, d.λ, CuArray{Float32}([1]), d.weight)
-  res = res .* d.bias
+  res = tvd_fft(x, d.λ, d.ρ, d.weight)
+  res = res .+ d.bias
   
   return σ.(res)
 end

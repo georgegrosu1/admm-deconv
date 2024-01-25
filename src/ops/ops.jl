@@ -1,4 +1,4 @@
-using  Flux, CUDA, NNlibCUDA
+using  Flux, CUDA, NNlib, NNlibCUDA, NNlib, FFTW
 
 include("../utilities/base_funcs.jl")
 
@@ -16,21 +16,25 @@ objfun_aniso(x,Dx,y,λ) = 0.5*sum(abs2.(x-y)) + λ*norm(Dx, 1)
 function tvd_fft_cpu(y::AbstractArray{T}, λ, ρ=1; h::AbstractArray{T}=[], isotropic=false, maxit=100) where {T}
 	M, N, P, _ = size(y)
 	y = permutedims(y, (1,2,4,3)) # move channels to batch dimension
-	τ = λ / ρ;
+	τ = λ ./ ρ
 
-	if isempty(h)
-		Σ = 1
+	if Flux.isempty(h)
+		Σ = Array{T}([1])
 	else
 		hh = NNlib.pad_constant(h, (0, M-size(h)[1], 0, N-size(h)[2], 0, 0, 0, 0))
 		# Σ = CUDA.CUFFT.rfft(hh)
-		Σ_ref = CUDA.CUFFT.rfft(hh[:,:,1,1])
-		Σ_ref = cat(Σ_ref, zeros(eltype(Σ_ref), size(Σ_ref)), dims=5)
+		Σ_ref = FFTW.rfft(hh[:,:,1,1])
+		Σ_ref = cat(Σ_ref, zeros(T, size(Σ_ref)), dims=5)
 		Σ = Σ_ref[:,:,:,:,1]
 	end
 
 	# precompute C for x-update
-	Λx = CUDA.CUFFT.rfft([1 -1 zeros(N-2)'; zeros(M-1,N)]);
-	Λy = CUDA.CUFFT.rfft([[1; -1; zeros(M-2)] zeros(M,N-1)])
+	# Compose Dx filter
+	dx_filter = cat(cat(Array{T}([1 -1]), zeros((1,N-2)), dims=2), zeros((M-1,N)), dims=1)
+	# Compose Dy filter
+	dy_filter = cat(cat(Array{T}([1; -1]), zeros((M-2)), dims=1), zeros((M,N-1)), dims=2)
+	Λx = FFTW.rfft(dx_filter)
+	Λy = FFTW.rfft(dy_filter)
 	C = 1 ./ ( abs2.(Σ) .+ ρ.*(abs2.(Λx) .+ abs2.(Λy)) )
 
 	if isotropic
@@ -47,9 +51,14 @@ function tvd_fft_cpu(y::AbstractArray{T}, λ, ρ=1; h::AbstractArray{T}=[], isot
 	z::AbstractArray{T} = zeros(T, M,N,2,P)
 	u::AbstractArray{T} = zeros(T, M,N,2,P)
 
-	# conv kernel
-	W = Array{T}([1 -1; 0 0 ;;;; 1 0; -1 0])
-	Wᵀ = Array{T}([0 0; -1 1;;; 0 -1; 0 1;;;;])
+	# W conv kernel
+	W1 = cat(cat(ones(1,1), -ones(1,1), dims=2), zeros(1,2), dims=1)
+	W2 = cat(cat(ones(1), -ones(1), dims=1), zeros(2), dims=2)
+	W = cat(W1, W2, dims=4)
+	# Wᵀ conv kernel
+	Wt1 = cat(zeros(1,2), cat(-ones(1,1),ones(1,1), dims=2), dims=1)
+	Wt2 = cat(zeros(2), cat(-ones(1),ones(1), dims=1), dims=2)
+	Wᵀ = permutedims(cat(Wt1, Wt2, dims=4), (1,2,4,3))
 
 	# (in-place) Circular convolution
 	cdims = DenseConvDims(NNlib.pad_circular(x, (1,0,1,0)), W)
@@ -74,19 +83,22 @@ function tvd_fft_cpu(y::AbstractArray{T}, λ, ρ=1; h::AbstractArray{T}=[], isot
 	end
 
 	for _ in 1:maxit
-		x = CUDA.CUFFT.irfft(C.*(CUDA.CUFFT.rfft( Hᵀ(y) + ρ*Dᵀ(z-u), (1,2) )), M, (1,2)); # x update
-		Dxᵏ = D(x);
-		z = thresh_type(Dxᵏ+u, τ);            # z update
-		u = u + Dxᵏ - z;                      # dual ascent
+		# x update
+		x = FFTW.irfft(C.*(FFTW.rfft( Hᵀ(y) + ρ .* Dᵀ(z-u), (1,2) )), M, (1,2))
+		Dxᵏ = D(x)
+		# z update
+		z = thresh_type(Dxᵏ+u, τ)
+		# dual ascent
+		u = u + Dxᵏ - z
 	end
-	x = permutedims(x, (1,2,4,3));
+	x = permutedims(x, (1,2,4,3))
 
 	return x
 end
 
 
 function tvd_fft_gpu(y::CGPUArray{T}, λ::CGPUArray{T}, ρ::CGPUArray{T}=CuArray([1]), h::CGPUArray{T}=CuArray([]), isotropic=false, maxit=100) where {T}
-	M, N, P, _ = CUDA.size(y)
+	M, N, P, B = CUDA.size(y)
 	y = CUDA.permutedims(y, (1,2,4,3)) # move channels to batch dimension
 	τ = λ ./ ρ
 
@@ -94,7 +106,6 @@ function tvd_fft_gpu(y::CGPUArray{T}, λ::CGPUArray{T}, ρ::CGPUArray{T}=CuArray
 		Σ = CuArray{T}([1])
 	else
 		hh = NNlibCUDA.pad_constant(h, (0, M-CUDA.size(h)[1], 0, N-CUDA.size(h)[2], 0, 0, 0, 0))
-		# Σ = CUDA.CUFFT.rfft(hh)
 		Σ_ref = CUDA.CUFFT.rfft(hh[:,:,1,1])
 		Σ_ref = CUDA.cat(Σ_ref, CUDA.zeros(T, CUDA.size(Σ_ref)), dims=5)
 		Σ = Σ_ref[:,:,:,:,1]
@@ -118,23 +129,24 @@ function tvd_fft_gpu(y::CGPUArray{T}, λ::CGPUArray{T}, ρ::CGPUArray{T}=CuArray
 	end
 
 	# initialization
-	x::CuArray{T} = CUDA.zeros(T, M,N,1,P)
-	Dxᵏ::CuArray{T} = CUDA.zeros(T, M,N,2,P)
-	z::CuArray{T} = CUDA.zeros(T, M,N,2,P)
-	u::CuArray{T} = CUDA.zeros(T, M,N,2,P)
+	x::CuArray{T} = CUDA.zeros(T, M,N,B,P)
+	Dxᵏ::CuArray{T} = CUDA.zeros(T, M,N,2*B,P)
+	z::CuArray{T} = CUDA.zeros(T, M,N,2*B,P)
+	u::CuArray{T} = CUDA.zeros(T, M,N,2*B,P)
 
 	# W conv kernel
 	W1 = CUDA.cat(CUDA.cat(CUDA.ones(1,1), -CUDA.ones(1,1), dims=2), CUDA.zeros(1,2), dims=1)
 	W2 = CUDA.cat(CUDA.cat(CUDA.ones(1), -CUDA.ones(1), dims=1), CUDA.zeros(2), dims=2)
-	W = CUDA.cat(W1, W2, dims=4)
+	W = CUDA.repeat(CUDA.cat(W1, W2, dims=4), 1,1,1,B)
 	# Wᵀ conv kernel
 	Wt1 = CUDA.cat(CUDA.zeros(1,2), CUDA.cat(-CUDA.ones(1,1), CUDA.ones(1,1), dims=2), dims=1)
 	Wt2 = CUDA.cat(CUDA.zeros(2), CUDA.cat(-CUDA.ones(1), CUDA.ones(1), dims=1), dims=2)
 	Wᵀ = CUDA.permutedims(CUDA.cat(Wt1, Wt2, dims=4), (1,2,4,3))
+	Wᵀ = CUDA.repeat(Wᵀ, 1,1,1,B)
 
 	# (in-place) Circular convolution
-	cdims = DenseConvDims(NNlibCUDA.pad_circular(x, (1,0,1,0)), W)
-	cdimsᵀ= DenseConvDims(NNlibCUDA.pad_circular(z, (0,1,0,1)), Wᵀ)
+	cdims = DenseConvDims(NNlibCUDA.pad_circular(x, (1,0,1,0)), W, groups=B)
+	cdimsᵀ= DenseConvDims(NNlibCUDA.pad_circular(z, (0,1,0,1)), Wᵀ, groups=B)
 	D(x) = NNlibCUDA.conv(NNlibCUDA.pad_circular(x, (1,0,1,0)), W, cdims)
 	Dᵀ(z) = NNlibCUDA.conv(NNlibCUDA.pad_circular(z, (0,1,0,1)), Wᵀ,cdimsᵀ)
 
@@ -142,14 +154,15 @@ function tvd_fft_gpu(y::CGPUArray{T}, λ::CGPUArray{T}, ρ::CGPUArray{T}=CuArray
 		H = identity
 		Hᵀ= identity
 	else
+		h = CUDA.repeat(h, 1,1,1,B)
 		hᵀ= CUDA.reverse(h)
 		padu, padd = CUDA.ceil(Int,(CUDA.size(h,1)-1)/2), CUDA.floor(Int,(CUDA.size(h,1)-1)/2)
 		padl, padr = CUDA.ceil(Int,(CUDA.size(h,2)-1)/2), CUDA.floor(Int,(CUDA.size(h,2)-1)/2)
 		pad1 = (padu, padd, padl, padr)
 		pad2 = (padd, padu, padr, padl)
 		# cdims reference being kept, rename variable to cdims2
-		cdims2 = DenseConvDims(NNlibCUDA.pad_circular(x, pad1), h)
-		cdims2ᵀ= DenseConvDims(NNlibCUDA.pad_circular(x, pad2), hᵀ)
+		cdims2 = DenseConvDims(NNlibCUDA.pad_circular(x, pad1), h, groups=B)
+		cdims2ᵀ= DenseConvDims(NNlibCUDA.pad_circular(x, pad2), hᵀ, groups=B)
 		H = x->NNlibCUDA.conv(NNlibCUDA.pad_circular(x, pad1), h, cdims2)
 		Hᵀ= x->NNlibCUDA.conv(NNlibCUDA.pad_circular(x, pad2), hᵀ,cdims2ᵀ)
 	end
@@ -166,4 +179,13 @@ function tvd_fft_gpu(y::CGPUArray{T}, λ::CGPUArray{T}, ρ::CGPUArray{T}=CuArray
 	x = CUDA.permutedims(x, (1,2,4,3))
 
 	return x
+end
+
+
+function tvd_fft(y::CGPUArray{T}, λ::CGPUArray{T}, ρ::CGPUArray{T}=CuArray([1]), h::CGPUArray{T}=CuArray([]), isotropic=false, maxit=100) where {T}
+	if eltype(y) == AbstractArray
+		return tvd_fft_cpu(y, λ, ρ; h, isotropic, maxit)
+	end
+
+	return tvd_fft_gpu(y, λ, ρ, h, isotropic, maxit)
 end

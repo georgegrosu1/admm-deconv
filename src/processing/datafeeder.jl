@@ -26,15 +26,16 @@ end
 
 function get_image(data::Vector, idx::Integer, target_shape::Tuple{Integer, Integer})
     img = img2tensor(Images.load(data[idx]))
+    imsize = size(img)
 
-    if (target_shape[1] > size(img)[1]) || (target_shape[2] > size(img)[2])
-        @warn "Desired target shape is greater than the maximum size of the target image. Complete image will be returned"
+    if (target_shape[1] > imsize[1]) || (target_shape[2] > imsize[2])
+        @warn "Desired target shape $target_shape is greater than the maximum size of the target image $imsize. Complete image will be returned"
         
         return img
     end
     
-    h_ref = rand(1:(size(img)[1]-target_shape[1]+1))
-    w_ref = rand(1:(size(img)[2]-target_shape[2]+1))
+    h_ref = rand(1:(imsize[1]-target_shape[1]+1))
+    w_ref = rand(1:(imsize[2]-target_shape[2]+1))
 
     return img[h_ref:(h_ref+target_shape[1]-1), w_ref:(w_ref+target_shape[2]-1), :]
 end

@@ -12,11 +12,11 @@ Zygote.@nograd CUDA.zeros
 
 # plotlyjs()
 
-train_set = ImageDataFeeder("D:/Projects/ISETC2022/dcnn-deblur/dataset/GOPRO_Large/train/x_set", "D:/Projects/ISETC2022/dcnn-deblur/dataset/GOPRO_Large/train/y_set", ".png", (128, 128), (128, 128))
+train_set = ImageDataFeeder("D:/Projects/ISETC2022/dcnn-deblur/dataset/GOPRO_Large/train/origblur/x_set", "D:/Projects/ISETC2022/dcnn-deblur/dataset/GOPRO_Large/train/y_set", ".png", (128, 128), (128, 128))
 
-traintest = Flux.DataLoader(train_set, batchsize=1)|>gpu
+traintest = Flux.DataLoader(train_set, batchsize=2)|>gpu
 
-model_test = Chain((ADMMDeconv((4,4), 3=>3, relu)))|>gpu
+model_test = Chain((ADMMDeconv((5,5), relu)))|>gpu
 
 # @show model(traintest.data[1][1])
 
