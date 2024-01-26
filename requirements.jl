@@ -2,6 +2,8 @@ using Pkg
 println(Pkg.status())
 
 dependencies = [
+    "ArgParse",
+    "JSON",
     "ProgressBars",
     "Glob",
     "IterTools",
@@ -11,7 +13,6 @@ dependencies = [
     "FFTW",
     "Pipe",
     "DataStructures",
-    "PlotlyJS",
     "PyPlot",
     "VegaLite",
     "FileIO",

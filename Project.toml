@@ -1,4 +1,5 @@
 [deps]
+ArgParse = "c7e460c6-2fb9-53a9-8c5b-16f535851c63"
 BSON = "fbb218c0-5317-5bc6-957e-2ee96dd4b1f0"
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 ColorTypes = "3da002f7-5984-5a60-b8a6-cbb66c0b333f"
@@ -20,6 +21,7 @@ ImageTransformations = "02fcd773-0e25-5acc-982a-7f6622650795"
 ImageView = "86fae568-95e7-573e-a6b2-d8a6b900c9ef"
 Images = "916415d5-f1e6-5110-898d-aaa5f9f070e0"
 IterTools = "c8e1da08-722c-5040-9ed9-7db0dc04731e"
+JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 MLUtils = "f1d291b0-491e-4a28-83b9-f70985020b54"
 NNlib = "872c559c-99b0-510c-b3b7-b6c96a88d5cd"
