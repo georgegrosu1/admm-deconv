@@ -3,8 +3,6 @@ using  Flux, CUDA, NNlib, NNlibCUDA, NNlib, FFTW
 include("../utilities/base_funcs.jl")
 
 
-CGPUArray = Union{AbstractArray{T}, CuArray{T}} where {T}
-
 HT(x,τ) = x*(abs(x) > τ)                      # hard-thresholding
 ST(x,τ) = sign.(x).*max.(abs.(x).-τ, 0)       # soft-thresholding
 pixelnorm(x) = sqrt.(sum(abs2, x, dims=(3,4))) # 2-norm on 4D image-tensor pixel-vectors
@@ -108,9 +106,8 @@ function tvd_fft_gpu(y::CGPUArray{T}, λ::CGPUArray{T}, ρ::CGPUArray{T}=CuArray
 		Σ = CuArray{T}([1])
 	else
 		hh = NNlibCUDA.pad_constant(h, (0, M-CUDA.size(h)[1], 0, N-CUDA.size(h)[2], 0, 0, 0, 0))
-		Σ_ref = CUDA.CUFFT.rfft(hh[:,:,1,1])
-		Σ_ref = CUDA.cat(Σ_ref, CUDA.zeros(T, CUDA.size(Σ_ref)), dims=5)
-		Σ = Σ_ref[:,:,:,:,1]
+		Σ_ref = CUDA.CUFFT.rfft(CUDA.dropdims(hh, dims=(3,4)))
+		Σ = CUDA.reshape(Σ_ref, CUDA.size(Σ_ref)..., 1, 1)
 	end
 
 	# precompute C for x-update

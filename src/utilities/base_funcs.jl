@@ -1,5 +1,7 @@
-using ImageFiltering, Images, ColorVectorSpace, ColorTypes, FFTW, Flux, DSP
+using Images, ColorVectorSpace, ColorTypes, FFTW, Flux, CUDA
 
+
+CGPUArray = Union{AbstractArray{T, N}, CuArray{T, N}} where {T, N}
 
 function expand_dims(arr::Array, dim_idx::Int64)
     s = [size(arr)...]
@@ -25,6 +27,21 @@ function img2tensor(img_in::Matrix, convert_type=Float32)
         im_out = permutedims(im_out, (2, 3, 1))
     end
     return im_out
+end
+
+
+function tensor2img(A::CGPUArray)
+	tensor2img(Gray, A)
+end
+
+
+function tensor2img(A::CGPUArray)
+	tensor2img(RGB, permutedims(A, (3,1,2)))
+end
+
+
+function tensor2img(ctype, A::CGPUArray)
+	reinterpret(reshape, ctype{N0f8}, N0f8.(clamp.(A,0,1)))
 end
 
 

@@ -1,0 +1,17 @@
+{
+  "train_data":{
+    "x_path": "D:/Projects/ISETC2022/dcnn-deblur/dataset/GOPRO_Large/train/origblur/x_set",
+    "y_path": "D:/Projects/ISETC2022/dcnn-deblur/dataset/GOPRO_Large/train/y_set"
+  },
+  "eval_data":{
+    "x_path": "D:/Projects/ISETC2022/dcnn-deblur/dataset/GOPRO_Large/test/origblur/x_set",
+    "y_path": "D:/Projects/ISETC2022/dcnn-deblur/dataset/GOPRO_Large/test/y_set"
+  },
+  "batch_size": 4,
+  "x_shape": [256, 256],
+  "y_shape": [256, 256],
+  "epochs": 50,
+  "lr_rate": 3e-4,
+  "model_save_path": "/models_weights",
+  "pretrained_model_path": "/models_weights/x_set_17_std-1p6_dcnn_256/x_set_17_std-1p6_dcnn_256_epoch18_vloss0.02.hdf5"
+}

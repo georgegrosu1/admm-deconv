@@ -1,10 +1,12 @@
 module ADMM_Deconv
 
 
-using Flux, Plots, CUDA, TestImages, DSP, Noise, IterTools, ProgressBars, Zygote
+using Flux, CUDA, TestImages, Noise, IterTools, ProgressBars, Zygote
+
 include("layers/deconv_admm.jl")
 include("utilities/base_funcs.jl")
 include("processing/datafeeder.jl")
+include("metrics/iqi.jl")
 
 # Avoid Zygote issue with no gradients defined for primitive CUDA kernels such as CUDA.ones / CUDA.zeros
 Zygote.@nograd CUDA.ones
@@ -12,11 +14,11 @@ Zygote.@nograd CUDA.zeros
 
 # plotlyjs()
 
-train_set = ImageDataFeeder("D:/Projects/ISETC2022/dcnn-deblur/dataset/GOPRO_Large/train/origblur/x_set", "D:/Projects/ISETC2022/dcnn-deblur/dataset/GOPRO_Large/train/y_set", ".png", (128, 128), (128, 128))
+train_set = ImageDataFeeder("D:/Projects/ISETC2022/dcnn-deblur/dataset/GOPRO_Large/train/origblur/x_set", "D:/Projects/ISETC2022/dcnn-deblur/dataset/GOPRO_Large/train/y_set", ".png", (64, 64), (64, 64))
 
 traintest = Flux.DataLoader(train_set, batchsize=2)|>gpu
 
-model_test = Chain((ADMMDeconv((5,5), relu)))|>gpu
+model_test = Chain(ADMMDeconv((5,5), relu), Conv((1,1), 3=>3, relu))|>gpu
 
 # @show model(traintest.data[1][1])
 
@@ -24,7 +26,9 @@ model_test = Chain((ADMMDeconv((5,5), relu)))|>gpu
 ps = Flux.params(model_test)
 opt = Flux.ADAM(0.0005)
 
-loss(x, y) = Flux.mse(model_test(x), y)|>gpu
+loss(x, y) = ssim_loss(model_test(x), y)|>gpu
+
+metric(x, y) = psnr(model_test(x), y)|>gpu
 
 
 for epoch in 1:2
@@ -32,7 +36,7 @@ for epoch in 1:2
     gs = Flux.gradient(() -> loss(x, y), ps)
     Flux.update!(opt,ps,gs)
 
-    print("Loss function (MSE)=", loss(x, y))
+    print("Loss function (SSIM)= $(loss(x, y)); PSNR= $(metric(x, y))")
   end
 end
 

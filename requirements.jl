@@ -32,6 +32,7 @@ dependencies = [
     "ImageFiltering",
     "CUDA",
     "cuDNN",
+    "ChainRulesCore",
     "Zygote",
     "NNlib",
     "NNlibCUDA",

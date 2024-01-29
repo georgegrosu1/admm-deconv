@@ -7,13 +7,13 @@ function fetch_json_data(js_file_name::AbstractString)
     if extension(js_file_name) != ".json"
         @error string("Config file has wrong file extension! .json is required but ", extension(js_file_name), " is given.")
     end
-    config_file_path = get_configs_dir() * "/" *js_file_name
+    config_file_path = get_configs_dir() * "/" * js_file_name
     return JSON.parsefile(config_file_path)
 end
 
 
 function get_configs_dir()
-    return replace(dirname(Base.active_project()), "\\"=>"/") * "/configs"
+    return replace(dirname(Base.active_project()), "\\"=>"/") * "/src/configs"
 end
 
 
