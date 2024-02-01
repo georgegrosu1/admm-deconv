@@ -39,7 +39,7 @@ dependencies = [
     "MLUtils",
     "Flux",
     "DeconvOptim",
-    "BSON"
+    "JLD2"
 ]
 
 Pkg.add(dependencies)

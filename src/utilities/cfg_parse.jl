@@ -12,8 +12,13 @@ function fetch_json_data(js_file_name::AbstractString)
 end
 
 
+function get_project_root()
+    return replace(dirname(Base.active_project()), "\\"=>"/")
+end
+
+
 function get_configs_dir()
-    return replace(dirname(Base.active_project()), "\\"=>"/") * "/src/configs"
+    return get_project_root() * "/src/configs"
 end
 
 

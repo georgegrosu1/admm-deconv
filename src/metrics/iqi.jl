@@ -163,7 +163,7 @@ function ssim_loss_fast(x::CGPUArray{T, N}, y::CGPUArray{T, N}; kernel_length=5,
 end
 
 
-function psnr(x::CGPUArray, y::CGPUArray, peak_val::Number=1.0f0)
+function peak_snr(x::CGPUArray, y::CGPUArray, peak_val::Number=1.0f0)
     mse = mean((y .- x).^2.0f0)
     if mse == 0.0f0
         return 100
