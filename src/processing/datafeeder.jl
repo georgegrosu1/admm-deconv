@@ -24,20 +24,21 @@ mutable struct ImageDataFeeder{T, M}
 end
 
 
-function get_image(data::Vector, idx::Integer, target_shape::Tuple{Integer, Integer})
-    img = img2tensor(Images.load(data[idx]))
-    imsize = size(img)
+function get_x_y_images(data::ImageDataFeeder, idx::Integer)
+    imgx = img2tensor(Images.load(data.x_data[idx]))
+    imgy = img2tensor(Images.load(data.y_data[idx]))
+    imsize = size(imgy)
 
-    if (target_shape[1] > imsize[1]) || (target_shape[2] > imsize[2])
+    if (data.y_shape[1] > imsize[1]) || (data.y_shape[2] > imsize[2])
         @warn "Desired target shape $target_shape is greater than the maximum size of the target image $imsize. Complete image will be returned"
         
-        return img
+        return imgx, imgy
     end
-    
-    h_ref = rand(1:(imsize[1]-target_shape[1]+1))
-    w_ref = rand(1:(imsize[2]-target_shape[2]+1))
 
-    return img[h_ref:(h_ref+target_shape[1]-1), w_ref:(w_ref+target_shape[2]-1), :]
+    h_ref = rand(1:(imsize[1]-data.y_shape[1]+1))
+    w_ref = rand(1:(imsize[2]-data.y_shape[2]+1))
+    
+    return imgx[h_ref:(h_ref+data.y_shape[1]-1), w_ref:(w_ref+data.y_shape[2]-1), :], imgy[h_ref:(h_ref+data.y_shape[1]-1), w_ref:(w_ref+data.y_shape[2]-1), :]
 end
 
 
@@ -51,8 +52,7 @@ function Base.getindex(dataset::ImageDataFeeder, idxs::Union{UnitRange, Vector, 
         idxs = Vector{Integer}([idxs])
     end
     
-    batch_in = map(idx -> get_image(dataset.x_data, idx, dataset.x_shape), idxs)
-    batch_gt = map(idx -> get_image(dataset.y_data, idx, dataset.y_shape), idxs)
+    batch_in, batch_gt = map(idx -> get_x_y_images(dataset, idx), idxs)
 
     batch_x = @pipe cat(batch_in..., dims=ndims(batch_in[end])+1)
     batch_y = @pipe cat(batch_gt..., dims=ndims(batch_gt[end])+1)

@@ -61,7 +61,7 @@ function train_model(train_eval::Tuple,
 	mkpath(save_model_dir)
 
     for epoch in 1:modelcfg["epochs"]
-		println("\n\n\n[ EPOCH $epoch ]")
+		println("\n\n\n\t\t\t\t\t\t\t\t\t\t\t\t\t[ EPOCH $epoch ]")
 
 		println("\nTRAINING")
 		avg_train_err, avg_train_psnr, avg_train_mse = 0, 0, 0
@@ -69,17 +69,19 @@ function train_model(train_eval::Tuple,
 			out = model(x)
 			gs = Flux.gradient(() -> loss(out, y), ps)
 			Flux.update!(opt, ps, gs)
-      
-			print("train_loss= $(loss(out, y)); train_psnr= $(psnr(out, y)); train_mse= $(mmse(out, y))")
 
-			avg_train_err += loss(x, y)
-			avg_train_psnr += psnr(x, y)
-			avg_train_mse += mmse(x, y)
+			res_err, res_psnr, res_mse = loss(out, y), psnr(out, y), mmse(out, y)
+      
+			print("train_loss= $res_err; train_psnr= $res_psnr; train_mse= $res_mse")
+
+			avg_train_err += res_err
+			avg_train_psnr += res_psnr
+			avg_train_mse += res_mse
         end
 		avg_train_err /= length(train_eval[1])
 		avg_train_psnr /= length(train_eval[1])
 		avg_train_mse /= length(train_eval[1])
-		printstyled("\n\nepoch_train_loss= $avg_train_err; epoch_train_psnr= $avg_train_psnr; epoch_train_mse= $avg_train_mse", color=:green)
+		printstyled("\n\nepoch_train_loss= $avg_train_err; epoch_train_psnr= $avg_train_psnr; epoch_train_mse= $avg_train_mse", bold=true, color=:green)
 
 		println("\n\nVALIDATING")
 		avg_val_err, avg_val_psnr, avg_val_mse = 0, 0, 0
@@ -95,7 +97,7 @@ function train_model(train_eval::Tuple,
 		avg_val_err /= length(train_eval[2])
 		avg_val_psnr /= length(train_eval[2])
 		avg_val_mse /= length(train_eval[2])
-		printstyled("\nepoch_val_loss= $avg_val_err; epoch_val_psnr= $avg_val_psnr; epoch_val_mse= $avg_val_mse", color=:green)
+		printstyled("\nepoch_val_loss= $avg_val_err; epoch_val_psnr= $avg_val_psnr; epoch_val_mse= $avg_val_mse", bold=true, color=:green)
 		printstyled("\n--------------------------------------------------------------------------------------------------------------------", color=:purple)
 
 		if avg_val_err < best_val_loss
