@@ -44,7 +44,7 @@ function train_model(train_eval::Tuple,
     ps = Flux.params(model)
     opt = Flux.ADAM(modelcfg["lr_rate"])
 
-	rl_plateau_reducer = ReduceRLPlateau(opt, 7, 0.5)
+	rl_plateau_reducer = ReduceRLPlateau(opt, 1, 0.5)
 
 	# Instantiate loss and metrics functions
     loss(x, y) = loss_func(x, y)|>to_device
@@ -79,7 +79,7 @@ function train_model(train_eval::Tuple,
 		avg_train_err /= length(train_eval[1])
 		avg_train_psnr /= length(train_eval[1])
 		avg_train_mse /= length(train_eval[1])
-		printstyled("\nepoch_train_loss= $avg_train_err; epoch_train_psnr= $avg_train_psnr; epoch_train_mse= $avg_train_mse", color=:red)
+		printstyled("\n\nepoch_train_loss= $avg_train_err; epoch_train_psnr= $avg_train_psnr; epoch_train_mse= $avg_train_mse", color=:green)
 
 		println("\n\nVALIDATING")
 		avg_val_err, avg_val_psnr, avg_val_mse = 0, 0, 0
@@ -96,6 +96,7 @@ function train_model(train_eval::Tuple,
 		avg_val_psnr /= length(train_eval[2])
 		avg_val_mse /= length(train_eval[2])
 		printstyled("\nepoch_val_loss= $avg_val_err; epoch_val_psnr= $avg_val_psnr; epoch_val_mse= $avg_val_mse", color=:green)
+		printstyled("\n--------------------------------------------------------------------------------------------------------------------", color=:purple)
 
 		if avg_val_err < best_val_loss
 			model_path = save_model_dir * "/$model_name-ep_$epoch-vloss_$avg_val_err-psnr_$avg_val_psnr-mse_$avg_val_mse.jld2"
