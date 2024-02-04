@@ -30,7 +30,7 @@ function get_x_y_images(data::ImageDataFeeder, idx::Integer)
     imsize = size(imgy)
 
     if (data.y_shape[1] > imsize[1]) || (data.y_shape[2] > imsize[2])
-        @warn "Desired target shape $target_shape is greater than the maximum size of the target image $imsize. Complete image will be returned"
+        @warn "Desired target shape $(data.y_shape) is greater than the maximum size of the target image $imsize. Complete image will be returned"
         
         return imgx, imgy
     end
@@ -38,7 +38,7 @@ function get_x_y_images(data::ImageDataFeeder, idx::Integer)
     h_ref = rand(1:(imsize[1]-data.y_shape[1]+1))
     w_ref = rand(1:(imsize[2]-data.y_shape[2]+1))
     
-    return imgx[h_ref:(h_ref+data.y_shape[1]-1), w_ref:(w_ref+data.y_shape[2]-1), :], imgy[h_ref:(h_ref+data.y_shape[1]-1), w_ref:(w_ref+data.y_shape[2]-1), :]
+    return imgx[h_ref:(h_ref+data.x_shape[1]-1), w_ref:(w_ref+data.x_shape[2]-1), :], imgy[h_ref:(h_ref+data.y_shape[1]-1), w_ref:(w_ref+data.y_shape[2]-1), :]
 end
 
 

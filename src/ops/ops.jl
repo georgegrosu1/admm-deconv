@@ -180,10 +180,10 @@ end
 
 
 function tvd_fft(y::CGPUArray{T}, λ::CGPUArray{T}, ρ::CGPUArray{T}=CuArray([1]), h::CGPUArray{T}=CuArray([]), isotropic=false, maxit=100) where {T}
-
-	if typeof(y) <: AbstractArray
-		return tvd_fft_cpu(y, λ, ρ, h, isotropic, maxit)
+	
+	if typeof(y) <: CuArray
+		return tvd_fft_gpu(y, λ, ρ, h, isotropic, maxit)
 	end
 
-	return tvd_fft_gpu(y, λ, ρ, h, isotropic, maxit)
+	return tvd_fft_cpu(y, λ, ρ, h, isotropic, maxit)
 end
