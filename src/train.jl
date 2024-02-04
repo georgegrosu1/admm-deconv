@@ -51,9 +51,6 @@ function train_model(train_eval::Tuple,
     psnr(x, y) = peak_snr(x, y)|>to_device
     mmse(x, y) = Flux.mse(x, y)|>to_device
 
-	# Instantiate variables to store training and evaluation progress
-    train_loss, train_mse, train_psnr = [], [], []
-    val_loss, val_mse, val_psnr = [], [], []
 	best_val_loss = Inf
 
 	# Create directory path where trained models will be saved based on given model name
@@ -116,7 +113,7 @@ function main()
 
     trainf_evalf = get_datafeeders(train_cfg)
 
-	train_model(trainf_evalf, train_cfg, ssim, user_args["model_name"], Flux.gpu)
+	train_model(trainf_evalf, train_cfg, ssim_loss, user_args["model_name"], Flux.gpu)
 end
 
 

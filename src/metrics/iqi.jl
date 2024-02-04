@@ -81,7 +81,7 @@ for grayscale and RGB images (i.e. x, y both of size (N1, N2, 1, B) and (N1, N2,
 
 See also [`ssim_loss`](@ref), [`ssim_loss_fast`](@ref).
 """
-function ssim(x::CGPUArray{T,N}, y::CGPUArray{T,N}, kernel_ref=ssim_kernel(x); peakval=T(1.0), crop=true, dims=:) where {T,N}
+function ssim(x::CGPUArray{T,N}, y::CGPUArray{T,N}, kernel_ref=ssim_kernel(x); peakval=T(1.0), crop=false, dims=:) where {T,N}
     _check_sizes(x, y)
 
     if typeof(x) <: CuArray
@@ -157,7 +157,7 @@ detailed description of SSIM and the above arguments.
 See also [`ssim_loss`](@ref).
 """
 function ssim_loss_fast(x::CGPUArray{T, N}, y::CGPUArray{T, N}; kernel_length=5, kws...) where {T, N}
-    kernel = ones_like(x, (kernel_length*ones(Int, N-2)..., 1, size(x, N-1)))
+    kernel = ones_like(x, (kernel_length*ones(T, N-2)..., 1, size(x, N-1)))
     kernel = kernel ./ sum(kernel; dims=1:N-1)
     return ssim_loss(x, y, kernel; kws...)
 end
