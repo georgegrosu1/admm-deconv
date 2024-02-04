@@ -11,28 +11,26 @@ objfun_iso(x,Dx,y,λ)   = 0.5*sum(abs2.(x-y)) + λ*norm(pixelnorm(Dx), 1)
 objfun_aniso(x,Dx,y,λ) = 0.5*sum(abs2.(x-y)) + λ*norm(Dx, 1)
 
 
-function tvd_fft_cpu(y::AbstractArray{T}, λ, ρ=1; h::AbstractArray{T}=[], isotropic=false, maxit=100) where {T}
+function tvd_fft_cpu(y::AbstractArray{T}, λ, ρ=1, h::AbstractArray{T}=[], isotropic=false, maxit=100) where {T}
 	M, N, P, B = size(y)
 	y = permutedims(y, (1,2,4,3)) # move channels to batch dimension
 	τ = λ ./ ρ
 
 	if Flux.isempty(h)
-		Σ = Array{T}([1])
+		Σ = AbstractArray{T}([1])
 	else
 		hh = NNlib.pad_constant(h, (0, M-size(h)[1], 0, N-size(h)[2], 0, 0, 0, 0))
-		# Σ = CUDA.CUFFT.rfft(hh)
-		Σ_ref = FFTW.rfft(hh[:,:,1,1])
-		Σ_ref = cat(Σ_ref, zeros(T, size(Σ_ref)), dims=5)
-		Σ = Σ_ref[:,:,:,:,1]
+		Σ_ref = rfft(dropdims(hh, dims=(3,4)))
+		Σ = reshape(Σ_ref, size(Σ_ref)..., 1, 1)
 	end
 
 	# precompute C for x-update
 	# Compose Dx filter
-	dx_filter = cat(cat(Array{T}([1 -1]), zeros((1,N-2)), dims=2), zeros((M-1,N)), dims=1)
+	dx_filter = cat(cat(AbstractArray{T}([1 -1]), zeros(T, (1,N-2)), dims=2), zeros(T, (M-1,N)), dims=1)
 	# Compose Dy filter
-	dy_filter = cat(cat(Array{T}([1; -1]), zeros((M-2)), dims=1), zeros((M,N-1)), dims=2)
-	Λx = FFTW.rfft(dx_filter)
-	Λy = FFTW.rfft(dy_filter)
+	dy_filter = cat(cat(AbstractArray{T}([1; -1]), zeros(T, (M-2)), dims=1), zeros(T, (M,N-1)), dims=2)
+	Λx = rfft(dx_filter)
+	Λy = rfft(dy_filter)
 	C = 1 ./ ( abs2.(Σ) .+ ρ.*(abs2.(Λx) .+ abs2.(Λy)) )
 
 	if isotropic
@@ -50,12 +48,12 @@ function tvd_fft_cpu(y::AbstractArray{T}, λ, ρ=1; h::AbstractArray{T}=[], isot
 	u::AbstractArray{T} = zeros(T, M,N,2*B,P)
 
 	# W conv kernel
-	W1 = cat(cat(ones(1,1), -ones(1,1), dims=2), zeros(1,2), dims=1)
-	W2 = cat(cat(ones(1), -ones(1), dims=1), zeros(2), dims=2)
+	W1 = cat(cat(ones(T, 1,1), -ones(T, 1,1), dims=2), zeros(T, 1,2), dims=1)
+	W2 = cat(cat(ones(T, 1), -ones(T, 1), dims=1), zeros(T, 2), dims=2)
 	W = repeat(cat(W1, W2, dims=4), 1,1,1,B)
 	# Wᵀ conv kernel
-	Wt1 = cat(zeros(1,2), cat(-ones(1,1),ones(1,1), dims=2), dims=1)
-	Wt2 = cat(zeros(2), cat(-ones(1),ones(1), dims=1), dims=2)
+	Wt1 = cat(zeros(T, 1,2), cat(-ones(T, 1,1), ones(T, 1,1), dims=2), dims=1)
+	Wt2 = cat(zeros(T, 2), cat(-ones(T, 1), ones(T, 1), dims=1), dims=2)
 	Wᵀ = permutedims(cat(Wt1, Wt2, dims=4), (1,2,4,3))
 	Wᵀ = repeat(Wᵀ, 1,1,1,B)
 
@@ -84,7 +82,7 @@ function tvd_fft_cpu(y::AbstractArray{T}, λ, ρ=1; h::AbstractArray{T}=[], isot
 
 	for _ in 1:maxit
 		# x update
-		x = FFTW.irfft(C.*(FFTW.rfft( Hᵀ(y) + ρ .* Dᵀ(z-u), (1,2) )), M, (1,2))
+		x = irfft(C.*(rfft( Hᵀ(y) + ρ .* Dᵀ(z-u), (1,2) )), M, (1,2))
 		Dxᵏ = D(x)
 		# z update
 		z = thresh_type(Dxᵏ+u, τ)
@@ -182,8 +180,9 @@ end
 
 
 function tvd_fft(y::CGPUArray{T}, λ::CGPUArray{T}, ρ::CGPUArray{T}=CuArray([1]), h::CGPUArray{T}=CuArray([]), isotropic=false, maxit=100) where {T}
-	if eltype(y) == AbstractArray
-		return tvd_fft_cpu(y, λ, ρ; h, isotropic, maxit)
+
+	if typeof(y) <: AbstractArray
+		return tvd_fft_cpu(y, λ, ρ, h, isotropic, maxit)
 	end
 
 	return tvd_fft_gpu(y, λ, ρ, h, isotropic, maxit)
