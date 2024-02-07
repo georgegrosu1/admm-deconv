@@ -52,10 +52,13 @@ function Base.getindex(dataset::ImageDataFeeder, idxs::Union{UnitRange, Vector, 
         idxs = Vector{Integer}([idxs])
     end
     
-    batch_in, batch_gt = map(idx -> get_x_y_images(dataset, idx), idxs)
+    batches_xy = map(idx -> get_x_y_images(dataset, idx), idxs)
 
-    batch_x = @pipe cat(batch_in..., dims=ndims(batch_in[end])+1)
-    batch_y = @pipe cat(batch_gt..., dims=ndims(batch_gt[end])+1)
+    batch_x = map(idx -> first(batches_xy[idx]), 1:length(batches_xy))
+    batch_y = map(idx -> last(batches_xy[idx]), 1:length(batches_xy))
+
+    batch_x = @pipe cat(batch_x..., dims=ndims(batch_x[end])+1)
+    batch_y = @pipe cat(batch_y..., dims=ndims(batch_y[end])+1)
 
     return batch_x, batch_y
 end
