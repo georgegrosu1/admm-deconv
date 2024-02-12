@@ -4,6 +4,10 @@ Random.seed!(256)
 using CUDA, Flux, ProgressBars, Zygote, JLD2
 Zygote.@nograd CUDA.ones
 Zygote.@nograd CUDA.zeros
+Zygote.@nograd CUDA.floor
+Zygote.@nograd CUDA.ceil
+Zygote.@nograd CUDA.repeat
+Zygote.@nograd typeof
 
 include("processing/datafeeder.jl")
 include("utilities/cfg_parse.jl")
@@ -29,6 +33,65 @@ function save_model(model_fpath::AbstractString, model_state)
 end
 
 
+function run_train!(xy_train::Flux.DataLoader, model, opt, loss_f::Function, metrics::Vector{Function}, avg_results::Vector)
+	println("\nTRAINING")
+
+	@assert length(avg_results) == (length(metrics) + 1)
+
+	step_results = ones((length(metrics) + 1,))
+	for (x,y) in ProgressBar(xy_train)
+		out = model(x)
+		res_err, grads = Flux.withgradient(model) do m
+			loss_f(m(x), y)
+		end
+		Flux.update!(opt, model, grads[1])
+
+		step_results[1] = res_err
+		step_res_msg = "train_loss= $res_err"
+		for (i, metric) in enumerate(metrics)
+			step_results[i+1] = metric(out, y)
+			step_res_msg *= "; train_$(String(Symbol(metric))) = $(step_results[i+1])"
+		end
+	
+		print(step_res_msg)
+
+		avg_results += step_results
+	end
+
+	avg_results ./= length(xy_train)
+	avg_res_msg = "\n\nepoch_train_loss= $(avg_results[1])"
+	for (i, metric) in enumerate(metrics)
+		avg_res_msg *= "; epoch_train_$(String(Symbol(metric))) = $(step_results[i+1])"
+	end
+
+	printstyled(avg_res_msg, bold=true, color=:green)
+end
+
+
+function run_eval!(xy_eval::Flux.DataLoader, model, opt, loss_f::Function, metrics::Vector{Function}, avg_results::Vector)
+	println("\n\nVALIDATING")
+
+	@assert length(avg_results) == (length(metrics) + 1)
+
+	for (x,y) in ProgressBar(xy_eval)
+		out = model(x)
+		avg_results[1] += loss_f(out, y)
+
+		for (i, metric) in enumerate(metrics)
+			avg_results[i+1] += metric(out, y)
+		end
+	end
+
+	avg_results ./= length(xy_eval)
+	eval_msg = "\nepoch_vloss= $(avg_results[1])"
+	for (i, metric) in enumerate(metrics)
+		eval_msg *= "; epoch_val_$(String(Symbol(metric))) = $(avg_results[i+1])"
+	end
+
+	printstyled(eval_msg, bold=true, color=:green)
+end
+
+
 function train_model(train_eval::Tuple, 
                      modelcfg::Dict, 
                      loss_func::Function,
@@ -40,10 +103,11 @@ function train_model(train_eval::Tuple,
 
 	# Create model and config params
     model = admm_restoration_model(modelcfg)|>to_device
-    ps = Flux.params(model)
-    opt = Flux.ADAM(modelcfg["lr_rate"])
 
-	rl_plateau_reducer = ReduceRLPlateau(opt, 1, 0.5)
+	optim = Flux.Optimiser(Adam(modelcfg["lr_rate"])) 
+	opt = Flux.setup(optim, model)
+
+	rl_plateau_reducer = ReduceRLPlateau(optim, 1, 0.5)
 
 	# Instantiate loss and metrics functions
     loss(x, y) = loss_func(x, y)|>to_device
@@ -57,50 +121,20 @@ function train_model(train_eval::Tuple,
 	mkpath(save_model_dir)
 
     for epoch in 1:modelcfg["epochs"]
-		println("\n\n\n\t\t\t\t\t\t\t\t\t\t\t\t\t[ EPOCH $epoch ]")
+		println("\n\n\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t[ EPOCH $epoch ]")
 
-		println("\nTRAINING")
-		avg_train_err, avg_train_psnr, avg_train_mse = 0, 0, 0
-        for (x,y) in ProgressBar(train_loader)
-			out = model(x)
-			gs = Flux.gradient(() -> loss(out, y), ps)
-			Flux.update!(opt, ps, gs)
+		avg_train_res, avg_eval_res = ones((3,)), ones((3,))
+		run_train!(train_loader, model, opt, loss, [psnr, mmse], avg_train_res)
+		run_eval!(eval_loader, model, opt, loss, [psnr, mmse], avg_eval_res)
 
-			res_err, res_psnr, res_mse = loss(out, y), psnr(out, y), mmse(out, y)
-      
-			print("train_loss= $res_err; train_psnr= $res_psnr; train_mse= $res_mse")
-
-			avg_train_err += res_err
-			avg_train_psnr += res_psnr
-			avg_train_mse += res_mse
-        end
-		avg_train_err /= length(train_eval[1])
-		avg_train_psnr /= length(train_eval[1])
-		avg_train_mse /= length(train_eval[1])
-		printstyled("\n\nepoch_train_loss= $avg_train_err; epoch_train_psnr= $avg_train_psnr; epoch_train_mse= $avg_train_mse", bold=true, color=:green)
-
-		println("\n\nVALIDATING")
-		avg_val_err, avg_val_psnr, avg_val_mse = 0, 0, 0
-		for (x,y) in ProgressBar(eval_loader)
-			out = model(x)
-			avg_val_err += loss(out, y)
-			avg_val_psnr += psnr(out, y)
-			avg_val_mse += mmse(out, y)
-		end
-
-		rl_plateau_reducer(avg_val_err)
-
-		avg_val_err /= length(train_eval[2])
-		avg_val_psnr /= length(train_eval[2])
-		avg_val_mse /= length(train_eval[2])
-		printstyled("\nepoch_val_loss= $avg_val_err; epoch_val_psnr= $avg_val_psnr; epoch_val_mse= $avg_val_mse", bold=true, color=:green)
-		printstyled("\n--------------------------------------------------------------------------------------------------------------------", color=:purple)
-
-		if avg_val_err < best_val_loss
-			model_path = save_model_dir * "/$model_name-ep_$epoch-vloss_$avg_val_err-psnr_$avg_val_psnr-mse_$avg_val_mse.jld2"
+		onplateau!(rl_plateau_reducer, avg_eval_res[1], model, opt)
+		
+		if avg_eval_res[1] < best_val_loss
+			model_path = save_model_dir * "/$model_name-ep_$epoch-vloss_$(avg_eval_res[1])-psnr_$(avg_eval_res[2])-mse_$(avg_eval_res[3]).jld2"
 			save_model(model_path, Flux.state(model))
-			best_val_loss = avg_val_err
+			best_val_loss = avg_eval_res[1]
 		end
+		printstyled("\n--------------------------------------------------------------------------------------------------------------------", color=:purple)
 	end
 end
 
