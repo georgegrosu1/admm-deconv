@@ -3,12 +3,15 @@ using  Flux, CUDA, NNlib, NNlibCUDA, NNlib, FFTW
 include("../utilities/base_funcs.jl")
 
 
+pixelnorm(x) = sqrt.(sum(x.^2, dims=(3,4))) # 2-norm on 4D image-tensor pixel-vectors
+
 HT(x,τ) = x*(abs(x) > τ)                      # hard-thresholding
-ST(x,τ) = sign.(x).*max.(abs.(x).-τ, 0)       # soft-thresholding
-pixelnorm(x) = sqrt.(sum(abs2, x, dims=(3,4))) # 2-norm on 4D image-tensor pixel-vectors
-BT(x,τ) = max.(1 .- τ ./ pixelnorm(x), 0).*x   # block-thresholding
-objfun_iso(x,Dx,y,λ)   = 0.5*sum(abs2.(x-y)) + λ*norm(pixelnorm(Dx), 1) 
-objfun_aniso(x,Dx,y,λ) = 0.5*sum(abs2.(x-y)) + λ*norm(Dx, 1)
+ST(x,τ) = sign.(x).*max.(abs.(x).-τ, 0f0)       # soft-thresholding
+BT(x,τ) = max.(1 .- τ ./ pixelnorm(x), 0).*x   # block-thresholding   # block-thresholding
+GT(x, τ) = (exp.(-pixelnorm(x).^2f0 .* (1f0 ./ τ)) .* 0.5f0 .* -1f0 .+ 0.5f0) .* x # gaussian-thresholding
+
+objfun_iso(x,Dx,y,λ)   = 0.5f0*sum(abs2.(x-y)) + λ*norm(pixelnorm(Dx), 1) 
+objfun_aniso(x,Dx,y,λ) = 0.5f0*sum(abs2.(x-y)) + λ*norm(Dx, 1)
 
 
 function tvd_fft_cpu(y::AbstractArray{T}, λ, ρ=1, h::AbstractArray{T}=[], isotropic=false, maxit=100) where {T}
@@ -34,10 +37,8 @@ function tvd_fft_cpu(y::AbstractArray{T}, λ, ρ=1, h::AbstractArray{T}=[], isot
 	C = 1 ./ ( abs2.(Σ) .+ ρ.*(abs2.(Λx) .+ abs2.(Λy)) )
 
 	if isotropic
-		objfun = (x,Dx) -> objfun_iso(x,Dx,y,λ)
 		thresh_type = BT # block-thresholding
 	else
-		objfun = (x,Dx) -> objfun_aniso(x,Dx,y,λ)
 		thresh_type = ST # soft-thresholding
 	end
 
@@ -101,7 +102,7 @@ function tvd_fft_gpu(y::CGPUArray{T}, λ::CGPUArray{T}, ρ::CGPUArray{T}=CuArray
 	τ = λ ./ ρ
 
 	if Flux.isempty(h)
-		Σ = CuArray{T}([1])
+		Σ = CuArray{T}([1f0])
 	else
 		hh = NNlibCUDA.pad_constant(h, (0, M-CUDA.size(h)[1], 0, N-CUDA.size(h)[2], 0, 0, 0, 0))
 		Σ_ref = CUDA.CUFFT.rfft(CUDA.dropdims(hh, dims=(3,4)))
@@ -118,10 +119,8 @@ function tvd_fft_gpu(y::CGPUArray{T}, λ::CGPUArray{T}, ρ::CGPUArray{T}=CuArray
 	C = 1 ./ ( CUDA.abs2.(Σ) .+ ρ.*(CUDA.abs2.(Λx) .+ CUDA.abs2.(Λy)) )
 
 	if isotropic
-		objfun = (x,Dx) -> objfun_iso(x,Dx,y,λ)
-		thresh_type = BT # block-thresholding
+		thresh_type = GT # block-thresholding
 	else
-		objfun = (x,Dx) -> objfun_aniso(x,Dx,y,λ)
 		thresh_type = ST # soft-thresholding
 	end
 

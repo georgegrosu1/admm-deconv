@@ -1,6 +1,8 @@
 import Random
 Random.seed!(256)
 
+# ENV["JULIA_CUDA_MEMORY_POOL"] = "none"
+
 using CUDA, Flux, ProgressBars, Zygote, JLD2
 Zygote.@nograd CUDA.ones
 Zygote.@nograd CUDA.zeros
@@ -56,6 +58,9 @@ function run_train!(xy_train::Flux.DataLoader, model, opt, loss_f::Function, met
 		print(step_res_msg)
 
 		avg_results += step_results
+
+		GC.gc();
+		CUDA.reclaim()
 	end
 
 	avg_results ./= length(xy_train)
@@ -120,6 +125,8 @@ function train_model(train_eval::Tuple,
 	save_model_dir = get_project_root() * "/trained_models/$model_name"
 	mkpath(save_model_dir)
 
+	model(CUDA.rand(Float32, (64,64,3,1)))
+
     for epoch in 1:modelcfg["epochs"]
 		println("\n\n\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t[ EPOCH $epoch ]")
 
@@ -130,11 +137,12 @@ function train_model(train_eval::Tuple,
 		onplateau!(rl_plateau_reducer, avg_eval_res[1], model, opt)
 		
 		if avg_eval_res[1] < best_val_loss
-			model_path = save_model_dir * "/$model_name-ep_$epoch-vloss_$(avg_eval_res[1])-psnr_$(avg_eval_res[2])-mse_$(avg_eval_res[3]).jld2"
+			model_path = save_model_dir * "/$model_name-ep_$epoch-vloss_$(round(avg_eval_res[1], digits=4))-psnr_$(round(avg_eval_res[2], digits=4))-mse_$(round(avg_eval_res[3], digits=4)).jld2"
 			save_model(model_path, Flux.state(model))
 			best_val_loss = avg_eval_res[1]
 		end
-		printstyled("\n--------------------------------------------------------------------------------------------------------------------", color=:purple)
+		printstyled("
+		\n-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------")
 	end
 end
 

@@ -3,7 +3,7 @@ include("../ops/ops.jl")
 
 
 #------------------------------------------------------------------------------------------------------------------------------
-struct ADMMDeconv{F,A,N,V,M,B,C}
+mutable struct ADMMDeconv{F,A,N,V,M,B,C}
   σ::F
   weight::A
   bias::V
@@ -46,6 +46,9 @@ Flux.@functor ADMMDeconv weight, bias, λ, ρ
 
 
 function (d::ADMMDeconv)(x::AbstractArray)
+  d.λ = sqrt.(d.λ .^2 .+ 1f-6^2)
+  d.ρ = sqrt.(d.ρ .^2 .+ 1f-6^2)
+  
   res = tvd_fft(x, d.λ, d.ρ, d.weight, d.iso, d.iters)
   res = res .+ d.bias
   

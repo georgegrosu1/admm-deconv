@@ -36,7 +36,7 @@ mutable struct ReduceRLPlateau{O,A,B}
 
     if red_rl.counter == red_rl.patience
         red_rl.optimizer.eta -= red_rl.optimizer.eta * red_rl.reduce_factor
-        println("\nReducing LR to: $(red_rl.optimizer.eta)")
+        printstyled("\nReducing LR to: $(red_rl.optimizer.eta)", color=:red)
         red_rl.counter = 0
         red_rl.last_obs = loss_val
 
