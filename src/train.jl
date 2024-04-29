@@ -1,9 +1,9 @@
 import Random
-Random.seed!(256)
+Random.seed!(90)
 
 # ENV["JULIA_CUDA_MEMORY_POOL"] = "none"
 
-using CUDA, Flux, ProgressBars, Zygote, JLD2
+using CUDA, Flux, ProgressBars, Zygote, JLD2, Plots, DataFrames, CSV
 Zygote.@nograd CUDA.ones
 Zygote.@nograd CUDA.zeros
 Zygote.@nograd CUDA.floor
@@ -35,21 +35,22 @@ function save_model(model_fpath::AbstractString, model_state)
 end
 
 
-function run_train!(xy_train::Flux.DataLoader, model, opt, loss_f::Function, metrics::Vector{Function}, avg_results::Vector)
+function run_train(xy_train::Flux.DataLoader, modelref, opt, loss_f::Function, metrics::Vector{Function})
 	println("\nTRAINING")
 
-	@assert length(avg_results) == (length(metrics) + 1)
+	avg_results = zeros((length(metrics) + 1,))
+	step_results = zeros((length(metrics) + 1,))
 
-	step_results = ones((length(metrics) + 1,))
 	for (x,y) in ProgressBar(xy_train)
-		out = model(x)
-		res_err, grads = Flux.withgradient(model) do m
+		out = modelref(x)
+		res_err, grads = Flux.withgradient(modelref) do m
 			loss_f(m(x), y)
 		end
-		Flux.update!(opt, model, grads[1])
+		Flux.update!(opt, modelref, grads[1])
 
 		step_results[1] = res_err
 		step_res_msg = "train_loss= $res_err"
+
 		for (i, metric) in enumerate(metrics)
 			step_results[i+1] = metric(out, y)
 			step_res_msg *= "; train_$(String(Symbol(metric))) = $(step_results[i+1])"
@@ -108,8 +109,7 @@ function train_model(train_eval::Tuple,
 
 	# Create model and config params
     model = admm_restoration_model(modelcfg)|>to_device
-
-	optim = Flux.Optimiser(Adam(modelcfg["lr_rate"])) 
+	optim = Flux.Optimiser(AdaBelief(modelcfg["lr_rate"])) 
 	opt = Flux.setup(optim, model)
 
 	rl_plateau_reducer = ReduceRLPlateau(optim, 1, 0.5)
@@ -125,13 +125,12 @@ function train_model(train_eval::Tuple,
 	save_model_dir = get_project_root() * "/trained_models/$model_name"
 	mkpath(save_model_dir)
 
-	model(CUDA.rand(Float32, (64,64,3,1)))
-
     for epoch in 1:modelcfg["epochs"]
 		println("\n\n\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t[ EPOCH $epoch ]")
+		
+		run_train(train_loader, model, opt, loss, [psnr, mmse])
 
-		avg_train_res, avg_eval_res = ones((3,)), ones((3,))
-		run_train!(train_loader, model, opt, loss, [psnr, mmse], avg_train_res)
+		avg_eval_res = zeros(3)
 		run_eval!(eval_loader, model, opt, loss, [psnr, mmse], avg_eval_res)
 
 		onplateau!(rl_plateau_reducer, avg_eval_res[1], model, opt)
@@ -148,13 +147,21 @@ end
 
 
 function main()
+	printstyled("\nParsing args", bold=true)
     user_args = parse_terminal_args()
+	printstyled("\nDONE", bold=true, color=:green)
 
+	printstyled("\nParsing train configs", bold=true)
     train_cfg = fetch_json_data(user_args["cfg_fname"])
+	printstyled("\nDONE", bold=true, color=:green)
 
+	printstyled("\nInitializing data feeders", bold=true)
     trainf_evalf = get_datafeeders(train_cfg)
+	printstyled("\nDONE", bold=true, color=:green)
 
-	train_model(trainf_evalf, train_cfg, ssim_loss, user_args["model_name"], Flux.gpu)
+	printstyled("\nProceeding with training", bold=true)
+	train_model(trainf_evalf, train_cfg, Flux.mae, user_args["model_name"], Flux.gpu)
+	printstyled("\nDONE", bold=true, color=:green)
 end
 
 

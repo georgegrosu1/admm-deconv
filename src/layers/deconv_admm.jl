@@ -3,7 +3,7 @@ include("../ops/ops.jl")
 
 
 #------------------------------------------------------------------------------------------------------------------------------
-mutable struct ADMMDeconv{F,A,N,V,M,B,C}
+mutable struct ADMMDeconv{F,A,N,V,M,B,C,D}
   σ::F
   weight::A
   bias::V
@@ -11,6 +11,7 @@ mutable struct ADMMDeconv{F,A,N,V,M,B,C}
   ρ::M
   iters::B
   iso::C
+  creg::D
 end
 
 
@@ -20,9 +21,10 @@ function ADMMDeconv(w::AbstractArray{T,N},
                     lambda,
                     rho,
                     iters,
-                    iso) where {T,N}
+                    iso,
+                    creg) where {T,N}
 
-  return ADMMDeconv(σ, w, b, lambda, rho, iters, iso)
+  return ADMMDeconv(σ, w, b, lambda, rho, iters, iso, creg)
 end
 
 
@@ -32,13 +34,14 @@ function ADMMDeconv(k::NTuple{N,Integer},
                     iso::Bool = false,
                     init = Flux.glorot_uniform, 
                     groups = 1,
-                    b = true) where {N}
+                    bias = false,
+                    creg::Number = 0f0) where {N}
 
   weight = Flux.convfilter(k, 1=>1; init=init, groups=groups)
   λ = abs.(Flux.glorot_uniform(1))
   ρ = abs.(Flux.glorot_uniform(1))
-  bias_w = Flux.create_bias(weight, b, 1)
-  ADMMDeconv(weight, σ, bias_w, λ, ρ, num_it, iso)
+  bias_w = Flux.create_bias(weight, bias, 1)
+  ADMMDeconv(weight, σ, bias_w, λ, ρ, num_it, iso, creg)
 end
 
 
@@ -46,12 +49,14 @@ Flux.@functor ADMMDeconv weight, bias, λ, ρ
 
 
 function (d::ADMMDeconv)(x::AbstractArray)
-  d.λ = sqrt.(d.λ .^2 .+ 1f-6^2)
-  d.ρ = sqrt.(d.ρ .^2 .+ 1f-6^2)
+  d.λ = clamp.(d.λ, d.creg, Inf32)
+  d.ρ = clamp.(d.ρ, d.creg, Inf32)
+
+  # d.weight = clamp.(d.weight, 0f0, Inf32)
   
   res = tvd_fft(x, d.λ, d.ρ, d.weight, d.iso, d.iters)
   res = res .+ d.bias
   
-  return σ.(res)
+  return d.σ.(res)
 end
 #------------------------------------------------------------------------------------------------------------------------------

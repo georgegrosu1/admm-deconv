@@ -8,13 +8,13 @@ pixelnorm(x) = sqrt.(sum(x.^2, dims=(3,4))) # 2-norm on 4D image-tensor pixel-ve
 HT(x,τ) = x*(abs(x) > τ)                      # hard-thresholding
 ST(x,τ) = sign.(x).*max.(abs.(x).-τ, 0f0)       # soft-thresholding
 BT(x,τ) = max.(1 .- τ ./ pixelnorm(x), 0).*x   # block-thresholding   # block-thresholding
-GT(x, τ) = (exp.(-pixelnorm(x).^2f0 .* (1f0 ./ τ)) .* 0.5f0 .* -1f0 .+ 0.5f0) .* x # gaussian-thresholding
+GT(x, τ) = (exp.(-pixelnorm(x).^2f0 ./ (2f0 .* τ.^2f0)) .* 0.5f0 .* -1f0 .+ 0.5f0) .* x # gaussian-thresholding
 
 objfun_iso(x,Dx,y,λ)   = 0.5f0*sum(abs2.(x-y)) + λ*norm(pixelnorm(Dx), 1) 
 objfun_aniso(x,Dx,y,λ) = 0.5f0*sum(abs2.(x-y)) + λ*norm(Dx, 1)
 
 
-function tvd_fft_cpu(y::AbstractArray{T}, λ, ρ=1, h::AbstractArray{T}=[], isotropic=false, maxit=100) where {T}
+function tvd_fft_cpu(y::AbstractArray{T}, λ, ρ::AbstractArray{T}=[1], h::AbstractArray{T}=[], isotropic=false, maxit=100) where {T}
 	M, N, P, B = size(y)
 	y = permutedims(y, (1,2,4,3)) # move channels to batch dimension
 	τ = λ ./ ρ
@@ -119,7 +119,7 @@ function tvd_fft_gpu(y::CGPUArray{T}, λ::CGPUArray{T}, ρ::CGPUArray{T}=CuArray
 	C = 1 ./ ( CUDA.abs2.(Σ) .+ ρ.*(CUDA.abs2.(Λx) .+ CUDA.abs2.(Λy)) )
 
 	if isotropic
-		thresh_type = GT # block-thresholding
+		thresh_type = BT # block-thresholding
 	else
 		thresh_type = ST # soft-thresholding
 	end

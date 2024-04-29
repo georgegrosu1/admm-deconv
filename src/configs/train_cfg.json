@@ -7,11 +7,11 @@
     "x_path": "D:/Projects/ISETC2022/dcnn-deblur/dataset/GOPRO_Large/test/origblur/x_set",
     "y_path": "D:/Projects/ISETC2022/dcnn-deblur/dataset/GOPRO_Large/test/y_set"
   },
-  "batch_size": 16,
-  "im_shape": [128, 128],
-  "epochs": 50,
-  "lr_rate": 3e-4,
-  "use_iso": false,
-  "model_save_path": "/models_weights",
-  "pretrained_model_path": "/models_weights/x_set_17_std-1p6_dcnn_256/x_set_17_std-1p6_dcnn_256_epoch18_vloss0.02.hdf5"
+  "batch_size": 3,
+  "im_shape": [256, 256],
+  "epochs": 130,
+  "lr_rate": 4e-4,
+  "use_iso": true,
+  "branches": 2,
+  "model_save_path": "/models_weights"
 }

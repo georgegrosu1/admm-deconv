@@ -24,6 +24,7 @@ dependencies = [
     "ImageView",
     "TestImages",
     "ImageTransformations",
+    "Statistics",
     "Noise",
     "DSP",
     "FixedPointNumbers",
