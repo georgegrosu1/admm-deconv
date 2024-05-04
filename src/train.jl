@@ -126,7 +126,7 @@ function train_model(train_eval::Tuple,
 	mkpath(save_model_dir)
 
     for epoch in 1:modelcfg["epochs"]
-		println("\n\n\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t[ EPOCH $epoch ]")
+		println("\n\n\n\t\t\t\t\t\t\t\t\t\t\t\t\t[ EPOCH $epoch ]")
 		
 		run_train(train_loader, model, opt, loss, [psnr, mmse])
 
