@@ -30,8 +30,11 @@ function get_datafeeders(cfg_json::Dict)
 end
 
 
-function save_model(model_fpath::AbstractString, model_state)
-	jldsave(model_fpath; model_state)
+function save_model(model_fpath::AbstractString, model)
+	let model = cpu(model)
+		model_state = Flux.state(model)
+		jldsave(model_fpath; model_state)
+	end
 end
 
 
@@ -86,6 +89,9 @@ function run_eval!(xy_eval::Flux.DataLoader, model, opt, loss_f::Function, metri
 		for (i, metric) in enumerate(metrics)
 			avg_results[i+1] += metric(out, y)
 		end
+
+		GC.gc();
+		CUDA.reclaim()
 	end
 
 	avg_results ./= length(xy_eval)
@@ -137,7 +143,7 @@ function train_model(train_eval::Tuple,
 		
 		if avg_eval_res[1] < best_val_loss
 			model_path = save_model_dir * "/$model_name-ep_$epoch-vloss_$(round(avg_eval_res[1], digits=4))-psnr_$(round(avg_eval_res[2], digits=4))-mse_$(round(avg_eval_res[3], digits=4)).jld2"
-			save_model(model_path, Flux.state(model))
+			save_model(model_path, model)
 			best_val_loss = avg_eval_res[1]
 		end
 		printstyled("

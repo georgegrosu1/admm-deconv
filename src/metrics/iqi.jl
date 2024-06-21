@@ -1,4 +1,4 @@
-using CUDA, NNlib, NNlibCUDA, MLUtils, Statistics, ChainRulesCore
+using CUDA, MLUtils, Statistics, ChainRulesCore
 include("../utilities/base_funcs.jl")
 
 
@@ -105,8 +105,8 @@ function ssim(x::CGPUArray{T,N}, y::CGPUArray{T,N}, kernel_ref=ssim_kernel(x); p
     if !crop
         # from Flux.jl:src/layers/conv.jl (calc_padding)
         padding = Tuple(mapfoldl(i -> [cld(i, 2), fld(i,2)], vcat, size(kernel)[1:N-2] .- 1))
-        x = NNlibCUDA.pad_symmetric(x, padding) 
-        y = NNlibCUDA.pad_symmetric(y, padding) 
+        x = pad_symmetric(x, padding) 
+        y = pad_symmetric(y, padding) 
     end
 
     μx  = conv(x, kernel, groups=groups)

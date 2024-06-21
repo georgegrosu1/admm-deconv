@@ -1,4 +1,4 @@
-using  Flux, CUDA, NNlib, NNlibCUDA, NNlib, FFTW
+using  Flux, CUDA, FFTW
 
 include("../utilities/base_funcs.jl")
 
@@ -22,7 +22,7 @@ function tvd_fft_cpu(y::AbstractArray{T}, λ, ρ::AbstractArray{T}=[1], h::Abstr
 	if Flux.isempty(h)
 		Σ = AbstractArray{T}([1])
 	else
-		hh = NNlib.pad_constant(h, (0, M-size(h)[1], 0, N-size(h)[2], 0, 0, 0, 0))
+		hh = pad_constant(h, (0, M-size(h)[1], 0, N-size(h)[2], 0, 0, 0, 0))
 		Σ_ref = rfft(dropdims(hh, dims=(3,4)))
 		Σ = reshape(Σ_ref, size(Σ_ref)..., 1, 1)
 	end
@@ -59,10 +59,10 @@ function tvd_fft_cpu(y::AbstractArray{T}, λ, ρ::AbstractArray{T}=[1], h::Abstr
 	Wᵀ = repeat(Wᵀ, 1,1,1,B)
 
 	# (in-place) Circular convolution
-	cdims = DenseConvDims(NNlib.pad_circular(x, (1,0,1,0)), W, groups=B)
-	cdimsᵀ= DenseConvDims(NNlib.pad_circular(z, (0,1,0,1)), Wᵀ, groups=B)
-	D(x) = NNlib.conv(NNlib.pad_circular(x, (1,0,1,0)), W, cdims)
-	Dᵀ(z) = NNlib.conv(NNlib.pad_circular(z, (0,1,0,1)), Wᵀ,cdimsᵀ)
+	cdims = DenseConvDims(pad_circular(x, (1,0,1,0)), W, groups=B)
+	cdimsᵀ= DenseConvDims(pad_circular(z, (0,1,0,1)), Wᵀ, groups=B)
+	D(x) = conv(pad_circular(x, (1,0,1,0)), W, cdims)
+	Dᵀ(z) = conv(pad_circular(z, (0,1,0,1)), Wᵀ,cdimsᵀ)
 
 	if isempty(h)
 		H = identity
@@ -75,10 +75,10 @@ function tvd_fft_cpu(y::AbstractArray{T}, λ, ρ::AbstractArray{T}=[1], h::Abstr
 		pad1 = (padu, padd, padl, padr)
 		pad2 = (padd, padu, padr, padl)
 		# cdims reference being kept, rename variable to cdims2
-		cdims2 = DenseConvDims(NNlib.pad_circular(x, pad1), h, groups=B)
-		cdims2ᵀ= DenseConvDims(NNlib.pad_circular(x, pad2), hᵀ, groups=B)
-		H = x->NNlib.conv(NNlib.pad_circular(x, pad1), h, cdims2)
-		Hᵀ= x->NNlib.conv(NNlib.pad_circular(x, pad2), hᵀ,cdims2ᵀ)
+		cdims2 = DenseConvDims(pad_circular(x, pad1), h, groups=B)
+		cdims2ᵀ= DenseConvDims(pad_circular(x, pad2), hᵀ, groups=B)
+		H = x->conv(pad_circular(x, pad1), h, cdims2)
+		Hᵀ= x->conv(pad_circular(x, pad2), hᵀ,cdims2ᵀ)
 	end
 
 	for _ in 1:maxit
@@ -104,7 +104,7 @@ function tvd_fft_gpu(y::CGPUArray{T}, λ::CGPUArray{T}, ρ::CGPUArray{T}=CuArray
 	if Flux.isempty(h)
 		Σ = CuArray{T}([1f0])
 	else
-		hh = NNlibCUDA.pad_constant(h, (0, M-CUDA.size(h)[1], 0, N-CUDA.size(h)[2], 0, 0, 0, 0))
+		hh = pad_constant(h, (0, M-CUDA.size(h)[1], 0, N-CUDA.size(h)[2], 0, 0, 0, 0))
 		Σ_ref = CUDA.CUFFT.rfft(CUDA.dropdims(hh, dims=(3,4)))
 		Σ = CUDA.reshape(Σ_ref, CUDA.size(Σ_ref)..., 1, 1)
 	end
@@ -141,10 +141,10 @@ function tvd_fft_gpu(y::CGPUArray{T}, λ::CGPUArray{T}, ρ::CGPUArray{T}=CuArray
 	Wᵀ = CUDA.repeat(Wᵀ, 1,1,1,B)
 
 	# (in-place) Circular convolution
-	cdims = DenseConvDims(NNlibCUDA.pad_circular(x, (1,0,1,0)), W, groups=B)
-	cdimsᵀ= DenseConvDims(NNlibCUDA.pad_circular(z, (0,1,0,1)), Wᵀ, groups=B)
-	D(x) = NNlibCUDA.conv(NNlibCUDA.pad_circular(x, (1,0,1,0)), W, cdims)
-	Dᵀ(z) = NNlibCUDA.conv(NNlibCUDA.pad_circular(z, (0,1,0,1)), Wᵀ,cdimsᵀ)
+	cdims = DenseConvDims(pad_circular(x, (1,0,1,0)), W, groups=B)
+	cdimsᵀ= DenseConvDims(pad_circular(z, (0,1,0,1)), Wᵀ, groups=B)
+	D(x) = conv(pad_circular(x, (1,0,1,0)), W, cdims)
+	Dᵀ(z) = conv(pad_circular(z, (0,1,0,1)), Wᵀ,cdimsᵀ)
 
 	if isempty(h)
 		H = identity
@@ -157,10 +157,10 @@ function tvd_fft_gpu(y::CGPUArray{T}, λ::CGPUArray{T}, ρ::CGPUArray{T}=CuArray
 		pad1 = (padu, padd, padl, padr)
 		pad2 = (padd, padu, padr, padl)
 		# cdims reference being kept, rename variable to cdims2
-		cdims2 = DenseConvDims(NNlibCUDA.pad_circular(x, pad1), h, groups=B)
-		cdims2ᵀ= DenseConvDims(NNlibCUDA.pad_circular(x, pad2), hᵀ, groups=B)
-		H = x->NNlibCUDA.conv(NNlibCUDA.pad_circular(x, pad1), h, cdims2)
-		Hᵀ= x->NNlibCUDA.conv(NNlibCUDA.pad_circular(x, pad2), hᵀ,cdims2ᵀ)
+		cdims2 = DenseConvDims(pad_circular(x, pad1), h, groups=B)
+		cdims2ᵀ= DenseConvDims(pad_circular(x, pad2), hᵀ, groups=B)
+		H = x->conv(pad_circular(x, pad1), h, cdims2)
+		Hᵀ= x->conv(pad_circular(x, pad2), hᵀ,cdims2ᵀ)
 	end
 
 	for _ in 1:maxit

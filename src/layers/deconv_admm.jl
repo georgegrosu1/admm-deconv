@@ -1,4 +1,4 @@
-using Flux, CUDA, NNlibCUDA
+using Flux, CUDA
 include("../ops/ops.jl")
 
 
@@ -49,8 +49,8 @@ Flux.@functor ADMMDeconv weight, bias, λ, ρ
 
 
 function (d::ADMMDeconv)(x::AbstractArray)
-  d.λ = clamp.(d.λ, d.creg, Inf32)
-  d.ρ = clamp.(d.ρ, d.creg, Inf32)
+  # d.λ = clamp.(d.λ, d.creg, Inf32)
+  # d.ρ = clamp.(d.ρ, d.creg, Inf32)
 
   # d.weight = clamp.(d.weight, 0f0, Inf32)
   
