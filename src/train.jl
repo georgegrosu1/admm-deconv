@@ -1,7 +1,6 @@
 import Random
 Random.seed!(90)
 
-# ENV["JULIA_CUDA_MEMORY_POOL"] = "none"
 
 using CUDA, Flux, ProgressBars, Zygote, JLD2, Plots, DataFrames, CSV
 Zygote.@nograd CUDA.ones
@@ -14,7 +13,9 @@ Zygote.@nograd typeof
 include("processing/datafeeder.jl")
 include("utilities/cfg_parse.jl")
 include("nets/net_build.jl")
-include("metrics/iqi.jl")
+include("metrics/ssim.jl")
+include("metrics/psnr.jl")
+include("metrics/gmsd.jl")
 include("optim/reduce_rl_plateau.jl")
 
 
@@ -38,11 +39,12 @@ function save_model(model_fpath::AbstractString, model)
 end
 
 
-function run_train(xy_train::Flux.DataLoader, modelref, opt, loss_f::Function, metrics::Vector{Function})
+function run_train(xy_train::Flux.DataLoader, modelref, opt, metrics::Vector{Function}, train_results_arr::Vector)
 	println("\nTRAINING")
+	
+	step_results = zeros((length(train_results_arr),))
 
-	avg_results = zeros((length(metrics) + 1,))
-	step_results = zeros((length(metrics) + 1,))
+	loss_f = metrics[1]
 
 	for (x,y) in ProgressBar(xy_train)
 		out = modelref(x)
@@ -54,53 +56,56 @@ function run_train(xy_train::Flux.DataLoader, modelref, opt, loss_f::Function, m
 		step_results[1] = res_err
 		step_res_msg = "train_loss= $res_err"
 
-		for (i, metric) in enumerate(metrics)
+		for (i, metric) in enumerate(metrics[2:end])
 			step_results[i+1] = metric(out, y)
 			step_res_msg *= "; train_$(String(Symbol(metric))) = $(step_results[i+1])"
 		end
 	
 		print(step_res_msg)
 
-		avg_results += step_results
+		train_results_arr += step_results
 
 		GC.gc();
 		CUDA.reclaim()
 	end
 
-	avg_results ./= length(xy_train)
-	avg_res_msg = "\n\nepoch_train_loss= $(avg_results[1])"
-	for (i, metric) in enumerate(metrics)
-		avg_res_msg *= "; epoch_train_$(String(Symbol(metric))) = $(step_results[i+1])"
+	train_results_arr ./= length(xy_train)
+	avg_res_msg = "\n\nepoch_train_loss = $(train_results_arr[1])"
+	for (i, metric) in enumerate(metrics[2:end])
+		avg_res_msg *= "; epoch_train_$(String(Symbol(metric))) = $(train_results_arr[i+1])"
 	end
 
 	printstyled(avg_res_msg, bold=true, color=:green)
+
+	return train_results_arr
 end
 
 
-function run_eval!(xy_eval::Flux.DataLoader, model, opt, loss_f::Function, metrics::Vector{Function}, avg_results::Vector)
+function run_eval(xy_eval::Flux.DataLoader, model, opt, metrics::Vector{Function}, eval_results_arr::Vector)
 	println("\n\nVALIDATING")
 
-	@assert length(avg_results) == (length(metrics) + 1)
+	@assert length(eval_results_arr) == (length(metrics))
+
+	loss_f = metrics[1]
 
 	for (x,y) in ProgressBar(xy_eval)
 		out = model(x)
-		avg_results[1] += loss_f(out, y)
+		eval_results_arr[1] += loss_f(out, y)
 
-		for (i, metric) in enumerate(metrics)
-			avg_results[i+1] += metric(out, y)
+		for (i, metric) in enumerate(metrics[2:end])
+			eval_results_arr[i+1] += metric(out, y)
 		end
-
-		GC.gc();
-		CUDA.reclaim()
 	end
 
-	avg_results ./= length(xy_eval)
-	eval_msg = "\nepoch_vloss= $(avg_results[1])"
-	for (i, metric) in enumerate(metrics)
-		eval_msg *= "; epoch_val_$(String(Symbol(metric))) = $(avg_results[i+1])"
+	eval_results_arr ./= length(xy_eval)
+	eval_msg = "\nepoch_vloss = $(eval_results_arr[1])"
+	for (i, metric) in enumerate(metrics[2:end])
+		eval_msg *= "; epoch_val_$(String(Symbol(metric))) = $(eval_results_arr[i+1])"
 	end
 
 	printstyled(eval_msg, bold=true, color=:green)
+
+	return eval_results_arr
 end
 
 
@@ -122,30 +127,48 @@ function train_model(train_eval::Tuple,
 
 	# Instantiate loss and metrics functions
     loss(x, y) = loss_func(x, y)|>to_device
-    psnr(x, y) = peak_snr(x, y)|>to_device
-    mmse(x, y) = Flux.mse(x, y)|>to_device
+	gmsd_m(x, y) = gmsd_loss(x, y)|>to_device
+    psnr_m(x, y) = peak_snr(x, y)|>to_device
+    mmse_m(x, y) = Flux.mse(x, y)|>to_device
+
+	metrics_arr = [loss, gmsd_m, psnr_m, mmse_m]
 
 	best_val_loss = Inf
 
 	# Create directory path where trained models will be saved based on given model name
 	save_model_dir = get_project_root() * "/trained_models/$model_name"
+	save_train_history_path = save_model_dir * "/train_eval_metrics_history.csv"
 	mkpath(save_model_dir)
+
+	training_res_df = DataFrame()
+	for stage in ["train", "eval"]
+		for metric in metrics_arr
+			col = "$(stage)_$(String(Symbol(metric)))"
+			training_res_df[!, col] = []
+		end
+	end
 
     for epoch in 1:modelcfg["epochs"]
 		println("\n\n\n\t\t\t\t\t\t\t\t\t\t\t\t\t[ EPOCH $epoch ]")
-		
-		run_train(train_loader, model, opt, loss, [psnr, mmse])
 
-		avg_eval_res = zeros(3)
-		run_eval!(eval_loader, model, opt, loss, [psnr, mmse], avg_eval_res)
-
-		onplateau!(rl_plateau_reducer, avg_eval_res[1], model, opt)
+		epoch_train_res_arr = zeros((length(metrics_arr), ))
+		epoch_eval_res_arr = zeros((length(metrics_arr), ))
 		
-		if avg_eval_res[1] < best_val_loss
-			model_path = save_model_dir * "/$model_name-ep_$epoch-vloss_$(round(avg_eval_res[1], digits=4))-psnr_$(round(avg_eval_res[2], digits=4))-mse_$(round(avg_eval_res[3], digits=4)).jld2"
+		epoch_train_res_arr = run_train(train_loader, model, opt, metrics_arr, epoch_train_res_arr)
+		epoch_eval_res_arr = run_eval(eval_loader, model, opt, metrics_arr, epoch_eval_res_arr)
+
+		# onplateau!(rl_plateau_reducer, epoch_eval_res_arr[1], model, opt)
+		
+		if epoch_eval_res_arr[1] < best_val_loss
+			model_path = save_model_dir * "/$model_name-ep_$epoch-vloss_$(round(epoch_eval_res_arr[1], digits=4))-psnr_$(round(epoch_eval_res_arr[2], digits=4))-mse_$(round(epoch_eval_res_arr[3], digits=4)).jld2"
 			save_model(model_path, model)
-			best_val_loss = avg_eval_res[1]
+			best_val_loss = epoch_eval_res_arr[1]
 		end
+
+		epoch_res = cat(epoch_train_res_arr, epoch_eval_res_arr, dims=1)
+		push!(training_res_df, epoch_res)
+		CSV.write(save_train_history_path, training_res_df)
+
 		printstyled("
 		\n-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------")
 	end
@@ -166,7 +189,7 @@ function main()
 	printstyled("\nDONE", bold=true, color=:green)
 
 	printstyled("\nProceeding with training", bold=true)
-	train_model(trainf_evalf, train_cfg, Flux.mae, user_args["model_name"], Flux.gpu)
+	train_model(trainf_evalf, train_cfg, gmsd_loss, user_args["model_name"], Flux.gpu)
 	printstyled("\nDONE", bold=true, color=:green)
 end
 

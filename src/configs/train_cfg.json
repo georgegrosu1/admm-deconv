@@ -1,16 +1,16 @@
 {
   "train_data":{
-    "x_path": "D:/Projects/ISETC2022/dcnn-deblur/dataset/GOPRO_Large/train/origblur/x_set",
-    "y_path": "D:/Projects/ISETC2022/dcnn-deblur/dataset/GOPRO_Large/train/y_set"
+    "x_path": "D:/Projects/ISETC2022/dcnn-deblur/dataset/GOPRO_Large/xt_256_0p8blur_10noise",
+    "y_path": "D:/Projects/ISETC2022/dcnn-deblur/dataset/GOPRO_Large/yt_256"
   },
   "eval_data":{
-    "x_path": "D:/Projects/ISETC2022/dcnn-deblur/dataset/GOPRO_Large/test/origblur/x_set",
-    "y_path": "D:/Projects/ISETC2022/dcnn-deblur/dataset/GOPRO_Large/test/y_set"
+    "x_path": "D:/Projects/ISETC2022/dcnn-deblur/dataset/GOPRO_Large/xt_256_0p8blur_10noise",
+    "y_path": "D:/Projects/ISETC2022/dcnn-deblur/dataset/GOPRO_Large/yt_256"
   },
   "batch_size": 3,
   "im_shape": [256, 256],
   "epochs": 130,
-  "lr_rate": 4e-4,
+  "lr_rate": 4e-3,
   "use_iso": true,
   "branches": 2,
   "model_save_path": "/models_weights"
