@@ -189,7 +189,7 @@ function main()
 	printstyled("\nDONE", bold=true, color=:green)
 
 	printstyled("\nProceeding with training", bold=true)
-	train_model(trainf_evalf, train_cfg, gmsd_loss, user_args["model_name"], Flux.gpu)
+	train_model(trainf_evalf, train_cfg, ssim_loss, user_args["model_name"], Flux.gpu)
 	printstyled("\nDONE", bold=true, color=:green)
 end
 

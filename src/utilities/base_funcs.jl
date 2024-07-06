@@ -3,6 +3,10 @@ using Images, ColorVectorSpace, ColorTypes, FFTW, Flux, CUDA
 
 CGPUArray = Union{AbstractArray{T, N}, CuArray{T, N}} where {T, N}
 
+
+file_extension(file::String) = file[findlast(==('.'), file)+1:end]
+
+
 function expand_dims(arr::Array, dim_idx::Int64)
     s = [size(arr)...]
     insert!(s, dim_idx, 1)
