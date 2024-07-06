@@ -39,13 +39,17 @@ function ADMMDeconvF1(k::NTuple{N,Integer},
                       creg::Number = 0f0) where {N}
 
 
-@assert λ > 0f0 "Parameter λ must be greater than 0"
+  @assert λ > 0f0 "Parameter λ must be greater than 0"
 
-weight = Flux.convfilter(k, 1=>1; init=init, groups=groups)
-λ = zeros(1) .+ λ
-ρ = abs.(Flux.glorot_uniform(1))
-bias_w = Flux.create_bias(weight, bias, 1)
-ADMMDeconvF1(weight, σ, bias_w, λ, ρ, num_it, iso, creg)
+  if isempty(k)
+    weight = empty(ones(1))
+  else
+    weight = Flux.convfilter(k, 1=>1; init=init, groups=groups)
+  end
+  λ = zeros(1) .+ λ
+  ρ = abs.(Flux.glorot_uniform(1))
+  bias_w = Flux.create_bias(weight, bias, 1)
+  ADMMDeconvF1(weight, σ, bias_w, λ, ρ, num_it, iso, creg)
 end
 
 Flux.@layer ADMMDeconvF1 trainable=(weight, bias, ρ,)
@@ -87,13 +91,17 @@ function ADMMDeconvF2(k::NTuple{N,Integer},
                       creg::Number = 0f0) where {N}
 
 
-@assert ρ > 0 "Parameter ρ must be greater than 0"
+  @assert ρ > 0 "Parameter ρ must be greater than 0"
 
-weight = Flux.convfilter(k, 1=>1; init=init, groups=groups)
-λ = abs.(Flux.glorot_uniform(1))
-ρ = zeros(1) .+ ρ
-bias_w = Flux.create_bias(weight, bias, 1)
-ADMMDeconvF2(weight, σ, bias_w, λ, ρ, num_it, iso, creg)
+  if isempty(k)
+    weight = empty(ones(1))
+  else
+    weight = Flux.convfilter(k, 1=>1; init=init, groups=groups)
+  end
+  λ = abs.(Flux.glorot_uniform(1))
+  ρ = zeros(1) .+ ρ
+  bias_w = Flux.create_bias(weight, bias, 1)
+  ADMMDeconvF2(weight, σ, bias_w, λ, ρ, num_it, iso, creg)
 end
 
 Flux.@layer ADMMDeconvF2 trainable=(weight, bias, λ,)
@@ -136,14 +144,18 @@ function ADMMDeconvF3(k::NTuple{N,Integer},
                       creg::Number = 0f0) where {N}
 
 
-@assert λ > 0 "Parameter λ must be greater than 0"
-@assert ρ > 0 "Parameter ρ must be greater than 0"
+  @assert λ > 0 "Parameter λ must be greater than 0"
+  @assert ρ > 0 "Parameter ρ must be greater than 0"
 
-weight = Flux.convfilter(k, 1=>1; init=init, groups=groups)
-λ = zeros(1) .+ λ
-ρ = zeros(1) .+ ρ
-bias_w = Flux.create_bias(weight, bias, 1)
-ADMMDeconvF3(weight, σ, bias_w, λ, ρ, num_it, iso, creg)
+  if isempty(k)
+    weight = empty(ones(1))
+  else
+    weight = Flux.convfilter(k, 1=>1; init=init, groups=groups)
+  end
+  λ = zeros(1) .+ λ
+  ρ = zeros(1) .+ ρ
+  bias_w = Flux.create_bias(weight, bias, 1)
+  ADMMDeconvF3(weight, σ, bias_w, λ, ρ, num_it, iso, creg)
 end
 
 Flux.@layer ADMMDeconvF3 trainable=(weight, bias,)
@@ -183,7 +195,11 @@ function ADMMDeconv(k::NTuple{N,Integer},
                     bias = false,
                     creg::Number = 0f0) where {N}
 
-  weight = Flux.convfilter(k, 1=>1; init=init, groups=groups)
+  if isempty(k)
+    weight = empty(ones(1))
+  else
+    weight = Flux.convfilter(k, 1=>1; init=init, groups=groups)
+  end
   λ = abs.(Flux.glorot_uniform(1))
   ρ = abs.(Flux.glorot_uniform(1))
   bias_w = Flux.create_bias(weight, bias, 1)
