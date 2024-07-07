@@ -4,7 +4,8 @@ using Images, ColorVectorSpace, ColorTypes, FFTW, Flux, CUDA
 CGPUArray = Union{AbstractArray{T, N}, CuArray{T, N}} where {T, N}
 
 
-file_extension(file::String) = file[findlast(==('.'), file)+1:end]
+fextension(file::String) = file[findlast(==('.'), file)+1:end]
+fname(file::String) = split(basename(file), ".")[1]
 
 
 function expand_dims(arr::Array, dim_idx::Int64)

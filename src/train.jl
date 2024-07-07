@@ -24,8 +24,8 @@ function get_datafeeders(cfg_json::Dict)
     train_feeder = ImageDataFeeder(cfg_json["train_data"]["x_path"], cfg_json["train_data"]["y_path"], ".png", target_shape, target_shape)
     eval_feeder = ImageDataFeeder(cfg_json["eval_data"]["x_path"], cfg_json["eval_data"]["y_path"], ".png", target_shape, target_shape)
 
-    train_loader = Flux.DataLoader(train_feeder, batchsize=cfg_json["batch_size"])
-    eval_loader = Flux.DataLoader(eval_feeder, batchsize=cfg_json["batch_size"])
+    train_loader = Flux.DataLoader(train_feeder, batchsize=cfg_json["batch_size"], shuffle=true)
+    eval_loader = Flux.DataLoader(eval_feeder, batchsize=cfg_json["batch_size"], shuffle=true)
 
     return train_loader, eval_loader
 end
