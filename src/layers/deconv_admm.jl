@@ -216,7 +216,7 @@ function (d::Admm)(x::AbstractArray)
   d.λ = clamp.(d.λ, d.creg, Inf32)
   d.ρ = clamp.(d.ρ, d.creg, Inf32)
 
-  # d.weight = clamp.(d.weight, 0f0, Inf32)
+  d.weight = clamp.(d.weight, 0f0, 1f0)
   
   res = tvd_fft(x, d.λ, d.ρ, d.weight, d.iso, d.iters)
   res = res .+ d.bias
