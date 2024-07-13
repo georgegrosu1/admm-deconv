@@ -71,7 +71,7 @@ function admm_restoration_model(mcfg::Dict)
     adk = (10, 10)
     uk1, uk2, uk3, uk4 = (25, 25), (19, 19), (13, 13), (9, 9)
     dk1, dk2, dk3, dk4 = (9, 9), (7, 7), (5, 5), (3, 3)
-    fu1 = (last(afu4)+3)=>32
+    fu1 = 38=>32
     fd1 = last(fu1)=>32
 
     fu2 = last(fd1)=>32
@@ -107,7 +107,7 @@ function admm_restoration_model(mcfg::Dict)
 
     # ↓ -------------------------------NxDECONVS BRANCH ------------------------------- ↓ #
 
-    k1, k2, k3 = (7, 7), (10, 10), (15, 15)
+    k1, k2, k3 = (10, 10), (15, 15), (20, 20)
     λ1, λ2, λ3 = 0.004f0, 0.04f0, 0.4f0
     ρ1, ρ2, ρ3 = 0.02f0, 0.04f0, 0.06f0
     deconv_1 = ADMMDeconvF3(k1, 50, λ1, ρ1, relu6, iso=mcfg["use_iso"])
