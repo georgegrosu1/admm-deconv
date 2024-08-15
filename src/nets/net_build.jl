@@ -21,7 +21,8 @@ function updownblock(upker, downker, upfilters::Pair, downfilters::Pair)
     return Chain(
         ConvTranspose(upker, upfilters, stride=1, pad=0; init=Flux.orthogonal),
         Conv(downker, downfilters, stride=1, pad=0; init=Flux.orthogonal),
-        Normalization
+        Normalization,
+        relu6
     )
 end
 
@@ -31,7 +32,7 @@ function downblock(downker, downfilters::Pair, pool_win::Tuple)
         Conv(downker, downfilters, stride=1, pad=0; init=Flux.orthogonal),
         Normalization,
         MaxPool(pool_win, pad=SamePad(), stride=1),
-        relu1
+        relu6
     )
 end
 
@@ -41,7 +42,7 @@ function upblock(upker, upfilters::Pair, pool_win::Tuple)
         ConvTranspose(upker, upfilters, stride=1, pad=0; init=Flux.orthogonal),
         Normalization,
         MaxPool(pool_win, pad=SamePad(), stride=1),
-        relu1
+        relu6
     )
 end
 
@@ -56,7 +57,7 @@ end
 function get_autoencoder(mcfg::Dict)
 
     ker1, ker2, ker3, ker4, ker5, ker6 = (23, 23), (21, 21), (17, 17), (15, 15), (11, 11), (9, 9)
-    afd1, afd2, afd3, afd4, afd5, afd6 = 3=>16, 16=>32, 32=>32, 32=>64, 64=>128, 128=>128
+    afd1, afd2, afd3, afd4, afd5, afd6 = 3=>16, 16=>32, 32=>32, 32=>64, 64=>64, 64=>128
 
     upkresid = 32
 
@@ -64,7 +65,7 @@ function get_autoencoder(mcfg::Dict)
     afu2 = (last(afu1)+upkresid)=>32
     afu3 = (last(afu2)+upkresid)=>64
     afu4 = (last(afu3)+upkresid)=>64
-    afu5 = (last(afu4)+upkresid)=>128
+    afu5 = (last(afu4)+upkresid)=>64
     afu6 = (last(afu5)+upkresid)=>128
     
     down_1 = downblock(ker1, afd1, (3,3))
@@ -169,16 +170,16 @@ function admm_denoiser(mcfg::Dict)
     
     # input = Chain(identity)
     autoencoder = get_autoencoder(mcfg)
-    denoiser = get_denoiser(mcfg)
+    # denoiser = get_denoiser(mcfg)
 
-    auto_denoise = Parallel(chcat, autoencoder, denoiser)
+    # auto_denoise = Parallel(chcat, autoencoder, denoiser)
 
-    last_updown = updownblock((5,5), (5, 5), 175=>64, 64=>32)
-    last_updown2 = updownblock((5,5), (5, 5), 35=>32, 32=>3)
+    last_updown = updownblock((5,5), (5, 5), 160=>32, 32=>32)
+    last_updown2 = updownblock((5,5), (5, 5), 35=>8, 8=>3)
 
-    core = Chain(auto_denoise, last_updown)
+    core = Chain(autoencoder, last_updown)
     prefin = SkipConnection(core, chcat)
-    fin = Chain(prefin, last_updown2, relu1)
+    fin = Chain(prefin, last_updown2)
 
     paramCount = 0
     for layer in fin

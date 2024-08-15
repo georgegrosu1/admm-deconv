@@ -46,20 +46,23 @@ function run_train(xy_train::Flux.DataLoader, modelref, opt, metrics::Vector{Fun
 
 	loss_f = metrics[1]
 
-	for (x,y) in ProgressBar(xy_train)
-		out = modelref(x)
-		res_err, grads = Flux.withgradient(modelref) do m
-			loss_f(m, x, y)
-		end
-		Flux.update!(opt, modelref, grads[1])
+	for observ in ProgressBar(xy_train)
 
+		res_err = loss_f(modelref, observ...)
 		step_results[1] = res_err
 		step_res_msg = "train_loss= $res_err"
+		out = modelref(first(observ))
 
 		for (i, metric) in enumerate(metrics[2:end])
-			step_results[i+1] = metric(out, y)
+			step_results[i+1] = metric(out, last(observ))
 			step_res_msg *= "; train_$(String(Symbol(metric))) = $(step_results[i+1])"
 		end
+
+		∂L∂m = gradient(loss_f, modelref, observ...)[1]
+		# res_err, grads = withgradient(modelref) do m
+		# 	loss_f(m, x, y)
+		# end
+		update!(opt, modelref, ∂L∂m)
 	
 		print(step_res_msg)
 
