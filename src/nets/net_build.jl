@@ -132,7 +132,7 @@ function get_multistage_updownscale(mcfg::Dict)
     adk = (10, 10)
     uk1, uk2, uk3, uk4 = (25, 25), (19, 19), (13, 13), (9, 9)
     dk1, dk2, dk3, dk4 = (9, 9), (7, 7), (5, 5), (3, 3)
-    fu1 = (last(afu4)+3)=>32
+    fu1 = 38=>32
     fd1 = last(fu1)=>32
 
     fu2 = last(fd1)=>32
