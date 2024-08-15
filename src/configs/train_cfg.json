@@ -1,16 +1,16 @@
 {
   "train_data":{
-    "x_path": "D:/Projects/admm-deconv/datasets/RealBlur/awgn_0_50/train/x",
-    "y_path": "D:/Projects/admm-deconv/datasets/RealBlur/awgn_0_50/train/y"
+    "x_path": "D:/Projects/datasets/RealBlur/awgn_25_25/train/x",
+    "y_path": "D:/Projects/datasets/RealBlur/awgn_25_25/train/y"
   },
   "eval_data":{
-    "x_path": "D:/Projects/admm-deconv/datasets/RealBlur/awgn_0_50/test/x",
-    "y_path": "D:/Projects/admm-deconv/datasets/RealBlur/awgn_0_50/test/y"
+    "x_path": "D:/Projects/datasets/RealBlur/awgn_25_25/test/x",
+    "y_path": "D:/Projects/datasets/RealBlur/awgn_25_25/test/y"
   },
   "batch_size": 2,
   "im_shape": [256, 256],
   "epochs": 130,
-  "lr_rate": 4e-4,
+  "lr_rate": 1e-1,
   "use_iso": true,
   "branches": 2,
   "model_save_path": "/models_weights"

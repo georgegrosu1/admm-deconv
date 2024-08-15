@@ -1,8 +1,8 @@
-import Random
-Random.seed!(90)
+using Random
 
+Random.seed!(42)
 
-using CUDA, Flux, ProgressBars, Zygote, JLD2, Plots, DataFrames, CSV
+using CUDA, Flux, ProgressBars, Zygote, JLD2, Plots, DataFrames, CSV, MLUtils
 Zygote.@nograd CUDA.ones
 Zygote.@nograd CUDA.zeros
 Zygote.@nograd CUDA.floor
@@ -13,9 +13,9 @@ Zygote.@nograd typeof
 include("processing/datafeeder.jl")
 include("utilities/cfg_parse.jl")
 include("nets/net_build.jl")
-include("metrics/ssim.jl")
 include("metrics/psnr.jl")
 include("metrics/gmsd.jl")
+include("metrics/ssim.jl")
 include("optim/reduce_rl_plateau.jl")
 
 
@@ -49,7 +49,7 @@ function run_train(xy_train::Flux.DataLoader, modelref, opt, metrics::Vector{Fun
 	for (x,y) in ProgressBar(xy_train)
 		out = modelref(x)
 		res_err, grads = Flux.withgradient(modelref) do m
-			loss_f(m(x), y)
+			loss_f(m, x, y)
 		end
 		Flux.update!(opt, modelref, grads[1])
 
@@ -119,14 +119,14 @@ function train_model(train_eval::Tuple,
 	eval_loader = train_eval[2]|>to_device
 
 	# Create model and config params
-    model = admm_restoration_model(modelcfg)|>to_device
+    model = admm_denoiser(modelcfg)|>to_device
 	optim = Flux.Optimiser(AdaBelief(modelcfg["lr_rate"])) 
 	opt = Flux.setup(optim, model)
 
-	rl_plateau_reducer = ReduceRLPlateau(optim, 1, 0.5)
+	rl_plateau_reducer = ReduceRLPlateau(optim, 4, 0.5)
 
 	# Instantiate loss and metrics functions
-    loss(x, y) = loss_func(x, y)|>to_device
+    loss(m, x, y) = loss_func(m(x), y)|>to_device
 	gmsd_m(x, y) = gmsd_loss(x, y)|>to_device
     psnr_m(x, y) = peak_snr(x, y)|>to_device
     mmse_m(x, y) = Flux.mse(x, y)|>to_device
@@ -157,7 +157,7 @@ function train_model(train_eval::Tuple,
 		epoch_train_res_arr = run_train(train_loader, model, opt, metrics_arr, epoch_train_res_arr)
 		epoch_eval_res_arr = run_eval(eval_loader, model, opt, metrics_arr, epoch_eval_res_arr)
 
-		# onplateau!(rl_plateau_reducer, epoch_eval_res_arr[1], model, opt)
+		onplateau!(rl_plateau_reducer, epoch_eval_res_arr[1], model, opt)
 		
 		if epoch_eval_res_arr[1] < best_val_loss
 			model_path = save_model_dir * "/$model_name-ep_$epoch-vloss_$(round(epoch_eval_res_arr[1], digits=4))-psnr_$(round(epoch_eval_res_arr[2], digits=4))-mse_$(round(epoch_eval_res_arr[3], digits=4)).jld2"

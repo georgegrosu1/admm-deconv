@@ -49,7 +49,7 @@ ChainRulesCore.@non_differentiable ssim_kernel(x::Any)
 function _check_sizes(x::CGPUArray, y::CGPUArray)
     for d in 1:max(ndims(x), ndims(y)) 
         size(x,d) == size(y,d) || throw(DimensionMismatch(
-          "loss function expects size(ŷ) = $(size(ŷ)) to match size(y) = $(size(y))"
+          "loss function expects size(ŷ) = $(size(y)) but is size $(size(x))"
         ))
     end
 end
@@ -81,7 +81,7 @@ for grayscale and RGB images (i.e. x, y both of size (N1, N2, 1, B) and (N1, N2,
 
 See also [`ssim_loss`](@ref), [`ssim_loss_fast`](@ref).
 """
-function ssim(x::CGPUArray{T,N}, y::CGPUArray{T,N}, kernel_ref=ssim_kernel(x); peakval=T(1.f0), crop=false, dims=:) where {T,N}
+function ssim(x::CGPUArray{T,N}, y::CGPUArray{T,N}, kernel_ref=ssim_kernel(x); peakval=T(1.f0), crop=true, dims=:) where {T,N}
     _check_sizes(x, y)
 
     if typeof(x) <: CuArray
@@ -119,7 +119,8 @@ function ssim(x::CGPUArray{T,N}, y::CGPUArray{T,N}, kernel_ref=ssim_kernel(x); p
     σxy = conv(x.*y, kernel, groups=groups) .- μxy
 
     ssim_map = @. (2μxy + C₁)*(2σxy + C₂)/((μx² + μy² + C₁)*(σx² + σy² + C₂))
-    return mean(ssim_map, dims=dims)
+    ims_ssim = mean(ssim_map, dims=(1,2,3))
+    return mean(ims_ssim)
 end
 
 """

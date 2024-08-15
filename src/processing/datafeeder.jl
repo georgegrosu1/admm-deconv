@@ -1,4 +1,4 @@
-using Images, Flux, FileIO, Glob, Pipe
+using Images, FileIO, Glob, Pipe, MLUtils
 include("../utilities/base_funcs.jl")
 
 
@@ -18,6 +18,10 @@ mutable struct ImageDataFeeder{T, M}
         
         x_paths = Glob.glob("*" * extension, x_source)
         y_paths = Glob.glob("*" * extension, y_source)
+
+        if (length(x_paths) == 0) || (length(y_paths) == 0) 
+            @warn "Provided paths resulted in empty list of images. X DATA: $(size(x_paths)); Y DATA: $(size(y_paths))"
+        end
 
         return new{typeof(x_source), typeof(x_targe_shape[1])}(x_paths, y_paths, x_targe_shape, y_target_shape, shuffle)
     end
@@ -43,7 +47,7 @@ end
 
 
 function Base.length(dataset::ImageDataFeeder)
-    return length(dataset.y_data)
+    return size(dataset.y_data)[end]
 end
 
 
@@ -61,4 +65,14 @@ function Base.getindex(dataset::ImageDataFeeder, idxs::Union{UnitRange, Vector, 
     batch_y = @pipe cat(batch_y..., dims=ndims(batch_y[end])+1)
 
     return batch_x, batch_y
+end
+
+
+function MLUtils.numobs(data::ImageDataFeeder)
+    return length(data)
+end
+
+
+function MLUtils.getobs(data::ImageDataFeeder, idx::Integer)
+    return getindex(data, idx)
 end

@@ -10,7 +10,7 @@ function similarity_map(map_xref::CGPUArray, map_x::CGPUArray, constant::Float32
 end
 
 
-function gmsd(x::CGPUArray{T,N}, y::CGPUArray{T,N}, t::Float32=0.0026f0, α::Float32=0.f0, reduction::Function=mean) where {T,N}
+function gmsd(x::CGPUArray{T,N}, y::CGPUArray{T,N}, t::Float32=0.0026f0, α::Float32=0.f0, reduction::Function=Flux.mean) where {T,N}
     x_gradx, x_grady = imgrads(x)
     y_gradx, y_grady = imgrads(y)
 

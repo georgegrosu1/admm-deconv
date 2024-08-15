@@ -40,12 +40,13 @@ function generate_dset(train_ims, min_σ, max_σ, dest)
         x_dest_file = x_dest * "/$idx.$x_ext"
         y_dest_file = y_dest * "/$idx.$y_ext"
 
-        imx = Images.load(x)
+        # imx = Images.load(x)
 
-        new_imx = add_awgn(imx, min_σ, max_σ)
+        # new_imx = add_awgn(imx, min_σ, max_σ)
 
-        Images.save(x_dest_file, new_imx)
-        cp(y, y_dest_file)
+        # Images.save(x_dest_file, new_imx)
+        # cp(x, x_dest_file)
+        cp(x, y_dest_file)
     end
 end
 
@@ -66,11 +67,12 @@ function add_gopro(min_σ, max_σ)
         x_file_dest = x_train_dest * fname(x) * "_$idx.$(fextension(x))"
         y_file_dest = y_train_dest * fname(y) * "_$idx.$(fextension(y))"
 
-        imx = Images.load(x)
+        imx = Images.load(y)
 
         new_imx = add_awgn(imx, min_σ, max_σ)
 
         Images.save(x_file_dest, new_imx)
+        # cp(x, x_file_dest)
         cp(y, y_file_dest)
     end
 
@@ -83,26 +85,27 @@ function add_gopro(min_σ, max_σ)
         x_file_dest = x_test_dest * fname(x) * "_$idx.$(fextension(x))"
         y_file_dest = y_test_dest * fname(y) * "_$idx.$(fextension(y))"
 
-        imx = Images.load(x)
+        imx = Images.load(y)
 
         new_imx = add_awgn(imx, min_σ, max_σ)
 
         Images.save(x_file_dest, new_imx)
+        # cp(x, x_file_dest)
         cp(y, y_file_dest)
     end
 end
 
 
 function main()
-    # train_txt_path_j = "D:/Projects/admm-deconv/datasets/RealBlur/RealBlur_J_train.txt"
-    # train_txt_path_r = "D:/Projects/admm-deconv/datasets/RealBlur/RealBlur_R_train.txt"
-    # test_txt_path_j = "D:/Projects/admm-deconv/datasets/RealBlur/RealBlur_J_test.txt"
-    # test_txt_path_r = "D:/Projects/admm-deconv/datasets/RealBlur/RealBlur_R_test.txt"
+    train_txt_path_j = "D:/Projects/admm-deconv/datasets/RealBlur/RealBlur_J_train.txt"
+    train_txt_path_r = "D:/Projects/admm-deconv/datasets/RealBlur/RealBlur_R_train.txt"
+    test_txt_path_j = "D:/Projects/admm-deconv/datasets/RealBlur/RealBlur_J_test.txt"
+    test_txt_path_r = "D:/Projects/admm-deconv/datasets/RealBlur/RealBlur_R_test.txt"
 
-    min_σ, max_σ = 0, 50
+    min_σ, max_σ = 25, 25
 
-    # train_dest = DSET_DIR * "awgn_$(min_σ)_$(max_σ)/train"
-    # test_dest = DSET_DIR * "awgn_$(min_σ)_$(max_σ)/test"
+    train_dest = DSET_DIR * "awgn_$(min_σ)_$(max_σ)/train"
+    test_dest = DSET_DIR * "awgn_$(min_σ)_$(max_σ)/test"
 
     # train_xy_paths = cat(get_train_im_paths(train_txt_path_j), get_train_im_paths(train_txt_path_r), dims=1)
     # test_xy_paths = cat(get_train_im_paths(test_txt_path_j), get_train_im_paths(test_txt_path_r), dims=1)
