@@ -93,7 +93,7 @@ function run_eval(xy_eval::Flux.DataLoader, model, opt, metrics::Vector{Function
 
 	for (x,y) in ProgressBar(xy_eval)
 		out = model(x)
-		eval_results_arr[1] += loss_f(out, y)
+		eval_results_arr[1] += loss_f(model, x, y)
 
 		for (i, metric) in enumerate(metrics[2:end])
 			eval_results_arr[i+1] += metric(out, y)
