@@ -58,11 +58,11 @@ function run_train(xy_train::Flux.DataLoader, modelref, opt, metrics::Vector{Fun
 			step_res_msg *= "; train_$(String(Symbol(metric))) = $(step_results[i+1])"
 		end
 
-		∂L∂m = gradient(loss_f, modelref, observ...)[1]
+		∂L∂m = Flux.gradient(loss_f, modelref, observ...)[1]
 		# res_err, grads = withgradient(modelref) do m
 		# 	loss_f(m, x, y)
 		# end
-		update!(opt, modelref, ∂L∂m)
+		Flux.update!(opt, modelref, ∂L∂m)
 	
 		print(step_res_msg)
 

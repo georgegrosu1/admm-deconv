@@ -170,16 +170,16 @@ function admm_denoiser(mcfg::Dict)
     
     # input = Chain(identity)
     autoencoder = get_autoencoder(mcfg)
-    # denoiser = get_denoiser(mcfg)
+    denoiser = get_denoiser(mcfg)
 
-    # auto_denoise = Parallel(chcat, autoencoder, denoiser)
+    auto_denoise = Parallel(chcat, autoencoder, denoiser)
 
-    last_updown = updownblock((5,5), (5, 5), 160=>32, 32=>32)
-    last_updown2 = updownblock((5,5), (5, 5), 35=>8, 8=>3)
+    last_updown = updownblock((5,5), (5, 5), 175=>128, 128=>64)
+    last_updown2 = updownblock((5,5), (5, 5), 67=>32, 32=>3)
 
-    core = Chain(autoencoder, last_updown)
+    core = Chain(auto_denoise, last_updown)
     prefin = SkipConnection(core, chcat)
-    fin = Chain(prefin, last_updown2)
+    fin = Chain(prefin, last_updown2, relu1)
 
     paramCount = 0
     for layer in fin
