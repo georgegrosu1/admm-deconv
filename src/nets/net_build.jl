@@ -57,12 +57,12 @@ end
 function get_autoencoder(mcfg::Dict)
 
     ker1, ker2, ker3, ker4, ker5, ker6 = (23, 23), (21, 21), (17, 17), (15, 15), (11, 11), (9, 9)
-    afd1, afd2, afd3, afd4, afd5, afd6 = 3=>16, 16=>32, 32=>32, 32=>64, 64=>64, 64=>128
+    afd1, afd2, afd3, afd4, afd5, afd6 = 3=>16, 16=>16, 16=>32, 32=>32, 32=>64, 64=>64
 
     upkresid = 32
 
     afu1 = last(afd6)=>16
-    afu2 = (last(afu1)+upkresid)=>32
+    afu2 = (last(afu1)+upkresid)=>64
     afu3 = (last(afu2)+upkresid)=>64
     afu4 = (last(afu3)+upkresid)=>64
     afu5 = (last(afu4)+upkresid)=>64
@@ -174,8 +174,8 @@ function admm_denoiser(mcfg::Dict)
 
     auto_denoise = Parallel(chcat, autoencoder, denoiser)
 
-    last_updown = updownblock((5,5), (5, 5), 175=>128, 128=>64)
-    last_updown2 = updownblock((5,5), (5, 5), 67=>32, 32=>3)
+    last_updown = updownblock((5,5), (5, 5), 175=>32, 32=>32)
+    last_updown2 = updownblock((5,5), (5, 5), 35=>32, 32=>3)
 
     core = Chain(auto_denoise, last_updown)
     prefin = SkipConnection(core, chcat)
