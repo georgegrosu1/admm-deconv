@@ -47,14 +47,11 @@ function run_train(xy_train::Flux.DataLoader, modelref, opt, metrics::Vector{Fun
 	loss_f = metrics[1]
 
 	for (x,y) in ProgressBar(xy_train)
-		
 		out = modelref(x)
-
-		# ∂L∂m = Flux.gradient(loss_f, modelref, observ...)[1]
-		res_err, ∂L∂m = Flux.withgradient(modelref) do m
-			loss_f(m, x, y)
+		res_err, grads = Flux.withgradient(modelref) do m
+			loss_f(m(x), y)
 		end
-		Flux.update!(opt, modelref, ∂L∂m[1])
+		Flux.update!(opt, modelref, grads[1])
 
 		step_results[1] = res_err
 		step_res_msg = "train_loss= $res_err"
@@ -88,14 +85,14 @@ function run_eval(xy_eval::Flux.DataLoader, model, opt, metrics::Vector{Function
 
 	@assert length(eval_results_arr) == (length(metrics))
 
-	loss_f = metrics[1]
+	# loss_f = metrics[1]
 
 	for (x,y) in ProgressBar(xy_eval)
 		out = model(x)
-		eval_results_arr[1] += loss_f(model, x, y)
+		# eval_results_arr[1] += loss_f(model(x), y)
 
-		for (i, metric) in enumerate(metrics[2:end])
-			eval_results_arr[i+1] += metric(out, y)
+		for (i, metric) in enumerate(metrics)
+			eval_results_arr[i] += metric(out, y)
 		end
 	end
 
@@ -125,10 +122,10 @@ function train_model(train_eval::Tuple,
 	optim = Flux.Optimiser(AdaBelief(modelcfg["lr_rate"])) 
 	opt = Flux.setup(optim, model)
 
-	rl_plateau_reducer = ReduceRLPlateau(optim, 4, 0.5)
+	rl_plateau_reducer = ReduceRLPlateau(optim, 10, 0.01)
 
 	# Instantiate loss and metrics functions
-    loss(m, x, y) = loss_func(m(x), y)|>to_device
+    loss(x, y) = loss_func(x, y)|>to_device
 	gmsd_m(x, y) = gmsd_loss(x, y)|>to_device
     psnr_m(x, y) = peak_snr(x, y)|>to_device
     mmse_m(x, y) = Flux.mse(x, y)|>to_device
@@ -191,7 +188,7 @@ function main()
 	printstyled("\nDONE", bold=true, color=:green)
 
 	printstyled("\nProceeding with training", bold=true)
-	train_model(trainf_evalf, train_cfg, ssim_loss, user_args["model_name"], Flux.gpu)
+	train_model(trainf_evalf, train_cfg, gmsd_loss, user_args["model_name"], Flux.gpu)
 	printstyled("\nDONE", bold=true, color=:green)
 end
 

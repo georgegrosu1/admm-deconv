@@ -73,6 +73,6 @@ function MLUtils.numobs(data::ImageDataFeeder)
 end
 
 
-function MLUtils.getobs(data::ImageDataFeeder, idx::Integer)
-    return getindex(data, idx)
+function MLUtils.getobs(data::ImageDataFeeder, idxs::Union{UnitRange, Vector, Integer})
+    return getindex(data, idxs)
 end

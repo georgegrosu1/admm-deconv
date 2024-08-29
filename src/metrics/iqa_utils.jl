@@ -51,5 +51,5 @@ end
 
 
 function gradientsmag(gradx::CGPUArray, grady::CGPUArray)
-    return sqrt.(gradx.^2 + grady.^2 .+ 1f-9)
+    return sqrt.(gradx.^2 + grady.^2 .+ 1f-16)
 end
